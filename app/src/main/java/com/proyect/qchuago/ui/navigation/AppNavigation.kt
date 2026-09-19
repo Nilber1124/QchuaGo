@@ -80,9 +80,16 @@ fun AppNavigation(
             )
         }
         composable(Rutas.HOME) {
+            val temaOscuro by authViewModel.temaOscuro.collectAsState()
             HomeScreen(
                 navController = navController,
                 usuario = usuario,
+                error = error,
+                temaOscuro = temaOscuro,
+                onCambiarTema = authViewModel::cambiarTema,
+                onCargarPerfil = authViewModel::recargarPerfil,
+                onActualizarNombre = authViewModel::actualizarNombre,
+                onCambiarContrasena = authViewModel::cambiarContrasena,
                 onCerrarSesion = authViewModel::cerrarSesion,
             )
         }

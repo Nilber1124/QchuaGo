@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Cover Base / Shadow -->
+    <path
+        android:fillColor="#8D2727"
+        android:pathData="M2.5,4.5C2.5,4.5 6.5,3.5 12,5.5C17.5,3.5 21.5,4.5 21.5,4.5V19.5C21.5,19.5 17.5,18.5 12,20.5C6.5,18.5 2.5,19.5 2.5,19.5V4.5Z" />
+    <!-- Left Page -->
+    <path
+        android:fillColor="#FFF8E7"
+        android:pathData="M3.5,5.5C3.5,5.5 7,4.8 11.5,6.5V19C7,17.5 3.5,18.2 3.5,18.2V5.5Z" />
+    <!-- Right Page -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20.5,5.5C20.5,5.5 17,4.8 12.5,6.5V19C17,17.5 20.5,18.2 20.5,18.2V5.5Z" />
+    <!-- Spine Line -->
+    <path
+        android:fillColor="#B71C1C"
+        android:pathData="M11.5,6V19.5H12.5V6H11.5Z" />
+    <!-- Red Bookmark Ribbon -->
+    <path
+        android:fillColor="#E53935"
+        android:pathData="M14,6.5H16.5V14.5L15.25,13.25L14,14.5V6.5Z" />
+</vector>

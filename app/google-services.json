@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "741502403407",
-    "project_id": "quechuago",
-    "storage_bucket": "quechuago.firebasestorage.app"
+    "project_number": "272387245664",
+    "project_id": "qchuago",
+    "storage_bucket": "qchuago.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:741502403407:android:e3ffe451ac5625bf987b3a",
+        "mobilesdk_app_id": "1:272387245664:android:49723c58373831ca032505",
         "android_client_info": {
           "package_name": "com.proyect.qchuago"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCZLqwGmnCW8VJuil4CbtI3fz5huRvG2II"
+          "current_key": "AIzaSyAhEq_-H2R17pg2Z4chEYFNiC8tLMr7ovU"
         }
       ],
       "services": {

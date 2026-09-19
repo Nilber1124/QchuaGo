@@ -52,6 +52,28 @@ class AuthService {
         auth.signOut()
     }
 
+    /** Actualiza el nombre del usuario en Firebase Auth. */
+    suspend fun actualizarNombre(nombre: String): Result<Unit> = try {
+        val user = auth.currentUser ?: return Result.failure(Exception("No hay sesión activa."))
+        esperar(
+            user.updateProfile(
+                UserProfileChangeRequest.Builder().setDisplayName(nombre.trim()).build()
+            )
+        )
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(Exception(mensajeComprensible(e)))
+    }
+
+    /** Cambia la contraseña del usuario en Firebase Auth. */
+    suspend fun cambiarContrasena(nuevaContrasena: String): Result<Unit> = try {
+        val user = auth.currentUser ?: return Result.failure(Exception("No hay sesión activa."))
+        esperar(user.updatePassword(nuevaContrasena))
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(Exception(mensajeComprensible(e)))
+    }
+
     /** Convierte una Task de Firebase en una operación suspendida (sin bloquear el hilo). */
     private suspend fun <T> esperar(tarea: Task<T>): T =
         suspendCancellableCoroutine { cont ->
@@ -76,6 +98,7 @@ class AuthService {
                 "ERROR_WRONG_PASSWORD",
                 "ERROR_INVALID_CREDENTIAL",
                 "ERROR_USER_NOT_FOUND" -> "El correo o la contraseña son incorrectos."
+                "ERROR_REQUIRES_RECENT_LOGIN" -> "Por seguridad, vuelve a iniciar sesión antes de cambiar tu contraseña."
                 "ERROR_NETWORK_REQUEST_FAILED" -> "No se pudo conectar con Firebase."
                 else -> "Ocurrió un error inesperado."
             }

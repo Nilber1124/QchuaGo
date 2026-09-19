@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Roof -->
+    <path
+        android:fillColor="#8D5B4C"
+        android:pathData="M12,3L2,11.5L3.5,13L12,5.8L20.5,13L22,11.5L12,3Z" />
+    <!-- Chimney -->
+    <path
+        android:fillColor="#B76E59"
+        android:pathData="M17,6H19V10H17V6Z" />
+    <!-- Main Body -->
+    <path
+        android:fillColor="#EAD7C6"
+        android:pathData="M4.5,11V20C4.5,20.55 4.95,21 5.5,21H18.5C19.05,21 19.5,20.55 19.5,20V11L12,4.8L4.5,11Z" />
+    <!-- Door -->
+    <path
+        android:fillColor="#734739"
+        android:pathData="M10,14H14V21H10V14Z" />
+    <!-- Door Knob -->
+    <path
+        android:fillColor="#FFC107"
+        android:pathData="M13,17.5A0.75,0.75 0 1,0 13,19A0.75,0.75 0 1,0 13,17.5Z" />
+</vector>

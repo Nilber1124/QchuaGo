@@ -120,9 +120,17 @@ QchuaGo/
    * Incluye enlace para regresar a la pantalla de inicio de sesión.
 
 4. **HomeScreen (`ui/screens/HomeScreen.kt`):**
-   * Muestra un mensaje de bienvenida personalizado utilizando el nombre del usuario (`¡Hola, [Nombre]!`).
-   * Contiene un botón para cerrar sesión (`Cerrar sesión`).
+   * Contenedor principal rediseñado con `Scaffold` y la barra de navegación inferior interactiva (`QchuaGoBottomBar`). Conecta las 5 pestañas activando la pantalla correspondiente según el ítem seleccionado.
+   * Contiene los composables vacíos independientes para cada apartado:
+     * `InicioScreen.kt` (`ui/screens/InicioScreen.kt`): Vista base del apartado Inicio.
+     * `ProgresoScreen.kt` (`ui/screens/ProgresoScreen.kt`): Vista base del apartado Progreso.
+     * `DiccionarioScreen.kt` (`ui/screens/DiccionarioScreen.kt`): Vista base del apartado Diccionario.
+     * `RepasoScreen.kt` (`ui/screens/RepasoScreen.kt`): Vista base del apartado Repaso.
+     * `PerfilScreen.kt` (`ui/screens/PerfilScreen.kt`): Vista de perfil conectada al usuario persistido, con estadísticas, progreso calculado con `Float`, edición de nombre, cambio de contraseña, preferencia de tema y cierre de sesión.
    * Redirige automáticamente a la pantalla de inicio de sesión cuando el usuario cierra su sesión.
+
+
+
 
 ---
 
@@ -153,7 +161,8 @@ QchuaGo/
   * Conversión de tareas asíncronas de Firebase (`Task`) a corrutinas de Kotlin (`suspendCancellableCoroutine`).
   * Traducción de códigos de error de Firebase (`FirebaseAuthException`) a mensajes amigables en español.
 * **Cloud Firestore:**
-  * La dependencia está incluida en `app/build.gradle.kts`, pero **no se está utilizando** actualmente en el código fuente.
+  * `FirestoreService.kt` mantiene documentos `usuarios/{uid}` con `nombre`, `correo`, `temaOscuro`, `nivel`, `xp`, `racha`, `vidas`, `leccionesCompletadas` y `totalLecciones`.
+  * Al cargar una sesión, crea el documento solo si falta y completa únicamente campos ausentes, sin reiniciar estadísticas existentes.
 * **Firebase Analytics:**
   * La dependencia está incluida en `app/build.gradle.kts`, pero **no se registra ningún evento personalizado** en el código fuente.
 * **Configuración:**
@@ -163,11 +172,12 @@ QchuaGo/
 
 ## 8. Componentes Importantes Existentes
 
-* **`Usuario.kt`:** Modelo de datos (`data class`) con las propiedades `uid`, `correo` y `nombre`.
+* **`Usuario.kt`:** Modelo de datos de perfil con identidad, preferencia de tema, nivel y estadísticas.
 * **`AuthService.kt`:** Servicio encapsulated para abstraer Firebase Authentication y retornar resultados envueltos en la clase `Result<Usuario>`.
-* **`AuthViewModel.kt`:** ViewModel que mantiene y expone los estados reactivos `sesionInicializada`, `usuario`, `cargando` y `error` como `StateFlow`.
+* **`FirestoreService.kt`:** Servicio encapsulado para cargar, crear de forma segura y actualizar campos del perfil en Cloud Firestore.
+* **`AuthViewModel.kt`:** ViewModel que mantiene y expone los estados reactivos `sesionInicializada`, `usuario`, `temaOscuro`, `cargando` y `error` como `StateFlow`.
 * **`logo_app.xml`:** Vector gráfico con diseño nativo (sol andino dorado y montañas quechuas en tonos verde/azul) utilizado en la pantalla de carga y de login.
-* **`QchuaGOTheme`:** Definición del tema Material 3 con soporte para colores dinámicos (Android 12+) y modos claro/oscuro.
+* **`QchuaGOTheme`:** Definición del tema Material 3 con esquemas claro/oscuro propios, controlados por la preferencia persistida del perfil.
 
 ---
 
@@ -180,15 +190,18 @@ QchuaGo/
 * Manejo y visualización de errores de autenticación en español.
 * Cierre de sesión.
 * Navegación reactiva según el estado de autenticación.
+* Perfil persistido en Firestore sin reemplazar el progreso existente.
+* Visualización de nivel, XP, racha, vidas, lecciones y progreso del usuario.
+* Sincronización del nombre entre Firebase Auth y Firestore, y cambio seguro de contraseña.
+* Tema claro/oscuro aplicado de inmediato y persistido por usuario.
 
 ---
 
 ## 10. Funcionalidades Incompletas o No Implementadas
 
 * **Lecciones / Contenido de Quechua:** No existe ninguna pantalla, modelo de datos, ni lógica referente a cursos, vocabulario, módulos o ejercicios de enseñanza de quechua.
-* **Uso de Firestore:** No hay código para almacenar información extendida de usuarios o progreso en la base de datos Firestore.
 * **Eventos de Analytics:** No hay código para el rastreo de eventos o métricas de uso de la app.
-* **Perfil de usuario:** No existe pantalla para modificar datos del usuario, cambiar foto de perfil o actualizar contraseña.
+* **Foto de perfil:** No está implementada; el avatar actual usa las iniciales del nombre.
 
 ---
 
@@ -198,9 +211,7 @@ QchuaGo/
    * En `AuthViewModel.kt`, se realiza `AuthService()` directamente en los parámetros por defecto. No se utiliza un framework de inyección de dependencias (como Hilt o Koin).
 2. **Escuchador de cambios de autenticación en tiempo real:**
    * `AuthViewModel` asigna `authService.usuarioActual` únicamente en su inicialización (`init`). No está suscrito a un `AuthStateListener` de Firebase para reaccionar inmediatamente a revocaciones de token o cambios externos de sesión.
-3. **Registro sin persistencia en Firestore:**
-   * Al registrar un usuario, solo se actualiza el perfil en Firebase Auth. No se crea una colección `usuarios` en Firestore para almacenar datos adicionales o preferencias.
-4. **Pruebas unitarias e instrumentadas de ejemplo:**
+3. **Pruebas unitarias e instrumentadas de ejemplo:**
    * Las clases `ExampleUnitTest.kt` y `ExampleInstrumentedTest.kt` contienen únicamente el código generado por defecto por Android Studio y no prueban la lógica real de la app.
-5. **Reglas R8/ProGuard:**
+4. **Reglas R8/ProGuard:**
    * El archivo `rules.keep` está vacío/en su plantilla por defecto.
