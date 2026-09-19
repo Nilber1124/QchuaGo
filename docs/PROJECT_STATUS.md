@@ -126,7 +126,7 @@ QchuaGo/
      * `ProgresoScreen.kt` (`ui/screens/ProgresoScreen.kt`): Vista base del apartado Progreso.
      * `DiccionarioScreen.kt` (`ui/screens/DiccionarioScreen.kt`): Vista base del apartado Diccionario.
      * `RepasoScreen.kt` (`ui/screens/RepasoScreen.kt`): Vista base del apartado Repaso.
-     * `PerfilScreen.kt` (`ui/screens/PerfilScreen.kt`): Vista de perfil conectada al usuario persistido, con estadísticas, progreso calculado con `Float`, edición de nombre, cambio de contraseña, preferencia de tema y cierre de sesión.
+     * `PerfilScreen.kt` (`ui/screens/PerfilScreen.kt`): Vista de perfil conectada al usuario persistido, organizada en secciones pequeñas de encabezado, estadísticas, progreso, preferencias y diálogos. Conserva edición de nombre, cambio de contraseña, tema y cierre de sesión.
    * Redirige automáticamente a la pantalla de inicio de sesión cuando el usuario cierra su sesión.
 
 
@@ -174,7 +174,7 @@ QchuaGo/
 
 * **`Usuario.kt`:** Modelo de datos de perfil con identidad, preferencia de tema, nivel y estadísticas.
 * **`AuthService.kt`:** Servicio encapsulated para abstraer Firebase Authentication y retornar resultados envueltos en la clase `Result<Usuario>`.
-* **`FirestoreService.kt`:** Servicio encapsulado para cargar, crear de forma segura y actualizar campos del perfil en Cloud Firestore.
+* **`FirestoreService.kt`:** Servicio encapsulado para cargar, crear de forma segura y actualizar campos del perfil en Cloud Firestore, manteniendo explícitos los campos faltantes sin reiniciar estadísticas.
 * **`AuthViewModel.kt`:** ViewModel que mantiene y expone los estados reactivos `sesionInicializada`, `usuario`, `temaOscuro`, `cargando` y `error` como `StateFlow`.
 * **`logo_app.xml`:** Vector gráfico con diseño nativo (sol andino dorado y montañas quechuas en tonos verde/azul) utilizado en la pantalla de carga y de login.
 * **`QchuaGOTheme`:** Definición del tema Material 3 con esquemas claro/oscuro propios, controlados por la preferencia persistida del perfil.

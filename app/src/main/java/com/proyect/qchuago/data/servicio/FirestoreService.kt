@@ -13,18 +13,6 @@ class FirestoreService {
     private val firestore = FirebaseFirestore.getInstance()
     private val usuariosCollection = firestore.collection("usuarios")
 
-    /** Obtiene el perfil persistido. No crea documentos ni oculta errores de red/permisos. */
-    suspend fun obtenerUsuario(uid: String): Result<Usuario> = try {
-        val snapshot = esperar(usuariosCollection.document(uid).get())
-        if (!snapshot.exists()) {
-            Result.failure(Exception("El perfil aún no existe."))
-        } else {
-            Result.success(aUsuario(snapshot, uid))
-        }
-    } catch (e: Exception) {
-        Result.failure(e)
-    }
-
     /**
      * Garantiza el documento usuarios/{uid}. Los valores iniciales se escriben solo cuando
      * el documento o un campo concreto no existe; nunca se reemplazan estadísticas existentes.
@@ -37,11 +25,11 @@ class FirestoreService {
             esperar(documento.set(datosIniciales(usuarioAuth)))
             Result.success(usuarioAuth)
         } else {
-            val camposFaltantes = camposFaltantes(snapshot, usuarioAuth)
+            val camposFaltantes = obtenerCamposFaltantes(snapshot, usuarioAuth)
             if (camposFaltantes.isNotEmpty()) {
                 esperar(documento.set(camposFaltantes, SetOptions.merge()))
             }
-            Result.success(aUsuario(snapshot, usuarioAuth.uid, usuarioAuth))
+            Result.success(crearUsuario(snapshot, usuarioAuth.uid, usuarioAuth))
         }
     } catch (e: Exception) {
         Result.failure(e)
@@ -73,20 +61,24 @@ class FirestoreService {
         "totalLecciones" to 9,
     )
 
-    private fun camposFaltantes(snapshot: DocumentSnapshot, usuario: Usuario): Map<String, Any> =
-        buildMap {
-            if (!snapshot.contains("nombre")) put("nombre", usuario.nombre)
-            if (!snapshot.contains("correo")) put("correo", usuario.correo)
-            if (!snapshot.contains("temaOscuro")) put("temaOscuro", false)
-            if (!snapshot.contains("nivel")) put("nivel", "Principiante")
-            if (!snapshot.contains("xp")) put("xp", 0)
-            if (!snapshot.contains("racha")) put("racha", 1)
-            if (!snapshot.contains("vidas")) put("vidas", 5)
-            if (!snapshot.contains("leccionesCompletadas")) put("leccionesCompletadas", 0)
-            if (!snapshot.contains("totalLecciones")) put("totalLecciones", 9)
-        }
+    private fun obtenerCamposFaltantes(
+        snapshot: DocumentSnapshot,
+        usuario: Usuario,
+    ): Map<String, Any> {
+        val campos = mutableMapOf<String, Any>()
+        if (!snapshot.contains("nombre")) campos["nombre"] = usuario.nombre
+        if (!snapshot.contains("correo")) campos["correo"] = usuario.correo
+        if (!snapshot.contains("temaOscuro")) campos["temaOscuro"] = false
+        if (!snapshot.contains("nivel")) campos["nivel"] = "Principiante"
+        if (!snapshot.contains("xp")) campos["xp"] = 0
+        if (!snapshot.contains("racha")) campos["racha"] = 1
+        if (!snapshot.contains("vidas")) campos["vidas"] = 5
+        if (!snapshot.contains("leccionesCompletadas")) campos["leccionesCompletadas"] = 0
+        if (!snapshot.contains("totalLecciones")) campos["totalLecciones"] = 9
+        return campos
+    }
 
-    private fun aUsuario(
+    private fun crearUsuario(
         snapshot: DocumentSnapshot,
         uid: String,
         usuarioAuth: Usuario = Usuario(uid = uid),
