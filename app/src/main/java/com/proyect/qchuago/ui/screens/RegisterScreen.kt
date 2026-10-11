@@ -30,12 +30,34 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.proyect.qchuago.data.entidad.Usuario
 import com.proyect.qchuago.ui.navigation.Rutas
+import com.proyect.qchuago.ui.viewmodel.AuthViewModel
+
+@Composable
+fun RegisterScreen(
+    navController: NavController,
+    authViewModel: AuthViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val cargando by authViewModel.cargando.collectAsState()
+    val error by authViewModel.error.collectAsState()
+    val usuario by authViewModel.usuario.collectAsState()
+
+    RegisterScreen(
+        navController = navController,
+        cargando = cargando,
+        error = error,
+        usuario = usuario,
+        onRegistrar = authViewModel::registrar,
+        modifier = modifier,
+    )
+}
 
 @Composable
 fun RegisterScreen(
@@ -43,7 +65,7 @@ fun RegisterScreen(
     cargando: Boolean,
     error: String?,
     usuario: Usuario?,
-    onRegistrar: (nombre: String, correo: String, contrasena: String) -> Unit,
+    onRegistrar: (Usuario, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var nombre by rememberSaveable { mutableStateOf("") }
@@ -148,7 +170,11 @@ fun RegisterScreen(
                     else -> null
                 }
                 if (mensajeError == null) {
-                    onRegistrar(nombre.trim(), correo.trim(), contrasena)
+                    val nuevoUsuario = Usuario(
+                        nombre = nombre.trim(),
+                        correo = correo.trim()
+                    )
+                    onRegistrar(nuevoUsuario, contrasena)
                 }
             },
             enabled = !cargando,

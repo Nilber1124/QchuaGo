@@ -43,8 +43,6 @@ fun AppNavigation(
 ) {
     val sesionInicializada by authViewModel.sesionInicializada.collectAsState()
     val usuario by authViewModel.usuario.collectAsState()
-    val cargando by authViewModel.cargando.collectAsState()
-    val error by authViewModel.error.collectAsState()
 
     // Cuando se comprueba la sesión al arrancar, salta a Login o Home.
     LaunchedEffect(sesionInicializada) {
@@ -64,33 +62,19 @@ fun AppNavigation(
         composable(Rutas.LOGIN) {
             LoginScreen(
                 navController = navController,
-                cargando = cargando,
-                error = error,
-                usuario = usuario,
-                onIniciarSesion = authViewModel::iniciarSesion,
+                authViewModel = authViewModel,
             )
         }
         composable(Rutas.REGISTRO) {
             RegisterScreen(
                 navController = navController,
-                cargando = cargando,
-                error = error,
-                usuario = usuario,
-                onRegistrar = authViewModel::registrar,
+                authViewModel = authViewModel,
             )
         }
         composable(Rutas.HOME) {
-            val temaOscuro by authViewModel.temaOscuro.collectAsState()
             HomeScreen(
                 navController = navController,
-                usuario = usuario,
-                error = error,
-                temaOscuro = temaOscuro,
-                onCambiarTema = authViewModel::cambiarTema,
-                onCargarPerfil = authViewModel::recargarPerfil,
-                onActualizarNombre = authViewModel::actualizarNombre,
-                onCambiarContrasena = authViewModel::cambiarContrasena,
-                onCerrarSesion = authViewModel::cerrarSesion,
+                authViewModel = authViewModel,
             )
         }
     }

@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,6 +40,27 @@ import androidx.navigation.NavController
 import com.proyect.qchuago.R
 import com.proyect.qchuago.data.entidad.Usuario
 import com.proyect.qchuago.ui.navigation.Rutas
+import com.proyect.qchuago.ui.viewmodel.AuthViewModel
+
+@Composable
+fun LoginScreen(
+    navController: NavController,
+    authViewModel: AuthViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val cargando by authViewModel.cargando.collectAsState()
+    val error by authViewModel.error.collectAsState()
+    val usuario by authViewModel.usuario.collectAsState()
+
+    LoginScreen(
+        navController = navController,
+        cargando = cargando,
+        error = error,
+        usuario = usuario,
+        onIniciarSesion = authViewModel::iniciarSesion,
+        modifier = modifier,
+    )
+}
 
 @Composable
 fun LoginScreen(

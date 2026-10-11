@@ -15,6 +15,8 @@ class AuthViewModel(
     private val firestoreService: FirestoreService = FirestoreService(),
 ) : ViewModel() {
 
+    private val cancelarEscuchaAuth: () -> Unit
+
     /** `true` cuando ya se comprobó si existía una sesión guardada. */
     private val _sesionInicializada = MutableStateFlow(false)
     val sesionInicializada: StateFlow<Boolean> = _sesionInicializada.asStateFlow()
@@ -27,7 +29,7 @@ class AuthViewModel(
     private val _temaOscuro = MutableStateFlow(false)
     val temaOscuro: StateFlow<Boolean> = _temaOscuro.asStateFlow()
 
-    /** `true` mientras se ejecuta un login o registro. */
+    /** `true` mientras se ejecuta un login, registro o acción bloqueante. */
     private val _cargando = MutableStateFlow(false)
     val cargando: StateFlow<Boolean> = _cargando.asStateFlow()
 
@@ -36,6 +38,13 @@ class AuthViewModel(
     val error: StateFlow<String?> = _error.asStateFlow()
 
     init {
+        cancelarEscuchaAuth = authService.escucharEstadoSesion { autenticado ->
+            if (!autenticado && _sesionInicializada.value) {
+                _usuario.value = null
+                _temaOscuro.value = false
+            }
+        }
+
         val usuarioAuth = authService.usuarioActual
         if (usuarioAuth != null) {
             viewModelScope.launch {
@@ -53,6 +62,43 @@ class AuthViewModel(
         } else {
             _sesionInicializada.value = true
         }
+    }
+
+    /**
+     * Actualiza el usuario tanto localmente (optimistic UI) como en Firestore.
+     * Si ocurre un error, revierte los cambios automáticamente.
+     * Permite modificar cualquier campo actual o futuro (vidas, xp, racha, tema, etc.) con una sola llamada.
+     */
+    fun actualizarUsuario(transformar: (Usuario) -> Usuario) {
+        actualizarUsuario(transformar, null)
+    }
+
+    fun actualizarUsuario(
+        transformar: (Usuario) -> Usuario,
+        onCompletado: ((Boolean) -> Unit)?
+    ) {
+        val previo = _usuario.value ?: return
+        val nuevo = transformar(previo)
+        _usuario.value = nuevo
+        _temaOscuro.value = nuevo.temaOscuro
+
+        viewModelScope.launch {
+            firestoreService.actualizarUsuario(nuevo)
+                .onSuccess {
+                    onCompletado?.invoke(true)
+                }
+                .onFailure { e ->
+                    // Revertir cambios en caso de falla
+                    _usuario.value = previo
+                    _temaOscuro.value = previo.temaOscuro
+                    _error.value = "Error al guardar los cambios: ${e.message ?: "Inténtalo más tarde."}"
+                    onCompletado?.invoke(false)
+                }
+        }
+    }
+
+    fun cambiarTema(activo: Boolean) {
+        actualizarUsuario { it.copy(temaOscuro = activo) }
     }
 
     fun iniciarSesion(correo: String, contrasena: String) {
@@ -76,20 +122,20 @@ class AuthViewModel(
         }
     }
 
-    fun registrar(nombre: String, correo: String, contrasena: String) {
+    fun registrar(nuevoUsuario: Usuario, contrasena: String) {
         _cargando.value = true
         _error.value = null
         viewModelScope.launch {
-            authService.registrar(correo.trim(), contrasena, nombre.trim())
-                .onSuccess { user ->
-                    firestoreService.obtenerOCrearUsuario(user)
+            authService.registrar(nuevoUsuario, contrasena)
+                .onSuccess { usuarioConUid ->
+                    // Guardado directo y explícito del usuario en la colección usuarios/{uid}
+                    firestoreService.guardarNuevoUsuario(usuarioConUid)
                         .onSuccess {
-                            _temaOscuro.value = it.temaOscuro
-                            _usuario.value = it
+                            _temaOscuro.value = usuarioConUid.temaOscuro
+                            _usuario.value = usuarioConUid
                         }
-                        .onFailure {
-                            _error.value = "La cuenta fue creada, pero no se pudo preparar el perfil."
-                            _usuario.value = user
+                        .onFailure { e ->
+                            _error.value = "La cuenta fue creada en Auth, pero ocurrió un error al guardar en Firestore: ${e.message}"
                         }
                 }
                 .onFailure { _error.value = it.message ?: "Ocurrió un error inesperado." }
@@ -97,23 +143,10 @@ class AuthViewModel(
         }
     }
 
-    fun cambiarTema(activo: Boolean) {
-        val uid = _usuario.value?.uid ?: return
-        val previo = _temaOscuro.value
-        val usuarioPrevio = _usuario.value
-        _temaOscuro.value = activo
-        _usuario.value = usuarioPrevio?.copy(temaOscuro = activo)
-
-        viewModelScope.launch {
-            firestoreService.actualizarTemaOscuro(uid, activo).onFailure {
-                _temaOscuro.value = previo // revert on failure
-                _usuario.value = usuarioPrevio
-                _error.value = "Error al guardar el tema."
-            }
-        }
+    fun registrar(nombre: String, correo: String, contrasena: String) {
+        registrar(Usuario(nombre = nombre.trim(), correo = correo.trim()), contrasena)
     }
 
-    /** Recarga el perfil al volver a abrir la pestaña Perfil. */
     fun recargarPerfil() {
         val usuarioActual = _usuario.value ?: return
         viewModelScope.launch {
@@ -133,23 +166,20 @@ class AuthViewModel(
             _error.value = "El nombre no puede estar vacío."
             return
         }
-        _cargando.value = true
-        _error.value = null
-        val usuarioActual = _usuario.value
-        val uid = usuarioActual?.uid
-        if (uid == null) {
+        val usuarioActual = _usuario.value ?: run {
             _error.value = "No hay sesión activa."
-            _cargando.value = false
             return
         }
+        val nombreLimpio = nuevoNombre.trim()
+        _cargando.value = true
+        _error.value = null
 
         viewModelScope.launch {
-            authService.actualizarNombre(nuevoNombre)
+            authService.actualizarNombre(nombreLimpio)
                 .onSuccess {
-                    firestoreService.actualizarNombre(uid, nuevoNombre)
+                    firestoreService.actualizarUsuario(usuarioActual.copy(nombre = nombreLimpio))
                         .onSuccess {
-                            // Actualizar estado local
-                            _usuario.value = usuarioActual.copy(nombre = nuevoNombre.trim())
+                            _usuario.value = usuarioActual.copy(nombre = nombreLimpio)
                             onSuccess()
                         }
                         .onFailure { _error.value = "Error al guardar en base de datos." }
@@ -190,5 +220,14 @@ class AuthViewModel(
         authService.cerrarSesion()
         _usuario.value = null
         _temaOscuro.value = false
+    }
+
+    fun limpiarError() {
+        _error.value = null
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        cancelarEscuchaAuth()
     }
 }

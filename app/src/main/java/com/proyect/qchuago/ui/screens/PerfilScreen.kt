@@ -16,6 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import com.proyect.qchuago.ui.theme.ColorRacha
+import com.proyect.qchuago.ui.theme.ColorVidas
+import com.proyect.qchuago.ui.theme.ColorXP
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -24,21 +27,45 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.proyect.qchuago.R
 import com.proyect.qchuago.data.entidad.Usuario
+import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 
 @Composable
 fun PerfilScreen(
-    usuario: Usuario?, error: String?, temaOscuro: Boolean,
-    onCambiarTema: (Boolean) -> Unit, onCargarPerfil: () -> Unit,
+    authViewModel: AuthViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val usuario by authViewModel.usuario.collectAsState()
+    val error by authViewModel.error.collectAsState()
+    val temaOscuro by authViewModel.temaOscuro.collectAsState()
+
+    PerfilScreen(
+        usuario = usuario,
+        error = error,
+        temaOscuro = temaOscuro,
+        onCambiarTema = authViewModel::cambiarTema,
+        onActualizarNombre = authViewModel::actualizarNombre,
+        onCambiarContrasena = authViewModel::cambiarContrasena,
+        onCerrarSesion = authViewModel::cerrarSesion,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun PerfilScreen(
+    usuario: Usuario?,
+    error: String?,
+    temaOscuro: Boolean,
+    onCambiarTema: (Boolean) -> Unit,
     onActualizarNombre: (String, () -> Unit) -> Unit,
     onCambiarContrasena: (String, String, () -> Unit) -> Unit,
-    onCerrarSesion: () -> Unit, modifier: Modifier = Modifier,
+    onCerrarSesion: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var mostrarEditarPerfil by remember { mutableStateOf(false) }
     var mostrarCambiarContrasena by remember { mutableStateOf(false) }
     var nuevoNombre by remember { mutableStateOf("") }
     var nuevaContrasena by remember { mutableStateOf("") }
     var confirmarContrasena by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) { onCargarPerfil() }
 
     val perfil = usuario ?: Usuario()
     val nombre = perfil.nombre.ifBlank { "Usuario" }
@@ -175,9 +202,9 @@ private fun EncabezadoPerfil(
                 color = MaterialTheme.colorScheme.onPrimary
             )
         }
-        
+
         Spacer(Modifier.height(16.dp))
-        
+
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
@@ -204,17 +231,17 @@ private fun EncabezadoPerfil(
                 )
             }
         }
-        
+
         Spacer(Modifier.height(4.dp))
-        
+
         Text(
             text = correo,
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        
+
         Spacer(Modifier.height(12.dp))
-        
+
         Surface(
             color = MaterialTheme.colorScheme.primary,
             shape = RoundedCornerShape(16.dp)
@@ -258,7 +285,7 @@ private fun TituloSeccion(
 @Composable
 private fun EstadisticasPerfil(usuario: Usuario) {
     val racha = if (usuario.racha == 1) "1 día" else "${usuario.racha} días"
-    
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -267,20 +294,20 @@ private fun EstadisticasPerfil(usuario: Usuario) {
             icono = R.drawable.ic_perfil_xp,
             valor = usuario.xp.toString(),
             etiqueta = "Puntos XP",
-            colorValor = Color(0xFFD97706),
+            colorValor = ColorXP,
             modifier = Modifier.weight(1f)
         )
         TarjetaEstadistica(
             icono = R.drawable.ic_perfil_racha,
             valor = racha,
             etiqueta = "Racha de días",
-            colorValor = Color(0xFFC2410C),
+            colorValor = ColorRacha,
             modifier = Modifier.weight(1f)
         )
     }
-    
+
     Spacer(Modifier.height(12.dp))
-    
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -296,7 +323,7 @@ private fun EstadisticasPerfil(usuario: Usuario) {
             icono = R.drawable.ic_perfil_vidas,
             valor = usuario.vidas.toString(),
             etiqueta = "Vidas restantes",
-            colorValor = Color(0xFFDC2626),
+            colorValor = ColorVidas,
             modifier = Modifier.weight(1f)
         )
     }
@@ -381,9 +408,9 @@ private fun TarjetaProgreso(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            
+
             Spacer(Modifier.height(10.dp))
-            
+
             LinearProgressIndicator(
                 progress = { progreso },
                 modifier = Modifier
@@ -394,9 +421,9 @@ private fun TarjetaProgreso(
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 strokeCap = StrokeCap.Round
             )
-            
+
             Spacer(Modifier.height(8.dp))
-            
+
             Text(
                 text = "${usuario.leccionesCompletadas} de ${usuario.totalLecciones} lecciones completadas",
                 fontSize = 12.sp,

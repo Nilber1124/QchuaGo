@@ -20,6 +20,11 @@ val LightOnSurface = Color(0xFF1E1E1E)
 val LightSurfaceVariant = Color(0xFFF7EFE4)
 val LightOnSurfaceVariant = Color(0xFF757575)
 
+// Colores semánticos para estadísticas de usuario
+val ColorXP = Color(0xFFD97706)
+val ColorRacha = Color(0xFFC2410C)
+val ColorVidas = Color(0xFFDC2626)
+
 // Nuevos colores para Dark Mode
 val DarkPrimary = Color(0xFF4CAF50)
 val DarkOnPrimary = Color(0xFF002204)

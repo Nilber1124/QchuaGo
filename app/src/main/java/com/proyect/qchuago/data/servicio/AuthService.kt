@@ -1,14 +1,10 @@
 package com.proyect.qchuago.data.servicio
 
-import com.google.android.gms.tasks.Task
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.proyect.qchuago.data.entidad.Usuario
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /**
  * Servicio que se comunica con Firebase Authentication.
@@ -32,20 +28,22 @@ class AuthService {
             Result.failure(Exception(mensajeComprensible(e)))
         }
 
-    /** Crea la cuenta, guarda el nombre en el perfil y devuelve el usuario. */
-    suspend fun registrar(correo: String, contrasena: String, nombre: String): Result<Usuario> =
+    /** Crea la cuenta usando la entidad Usuario, asigna su displayName y retorna el Usuario con su UID asignado. */
+    suspend fun registrar(usuario: Usuario, contrasena: String): Result<Usuario> =
         try {
-            val usuario = esperar(auth.createUserWithEmailAndPassword(correo, contrasena)).user
+            val user = esperar(auth.createUserWithEmailAndPassword(usuario.correo.trim(), contrasena)).user
                 ?: return Result.failure(Exception("Ocurrió un error inesperado."))
             esperar(
-                usuario.updateProfile(
-                    UserProfileChangeRequest.Builder().setDisplayName(nombre.trim()).build()
+                user.updateProfile(
+                    UserProfileChangeRequest.Builder().setDisplayName(usuario.nombre.trim()).build()
                 )
             )
-            Result.success(aUsuario(usuario))
+            Result.success(usuario.copy(uid = user.uid))
         } catch (e: Exception) {
             Result.failure(Exception(mensajeComprensible(e)))
         }
+
+
 
     /** Cierra la sesión activa. */
     fun cerrarSesion() {
@@ -74,19 +72,12 @@ class AuthService {
         Result.failure(Exception(mensajeComprensible(e)))
     }
 
-    /** Convierte una Task de Firebase en una operación suspendida (sin bloquear el hilo). */
-    private suspend fun <T> esperar(tarea: Task<T>): T =
-        suspendCancellableCoroutine { cont ->
-            tarea.addOnCompleteListener { t ->
-                if (t.isSuccessful) {
-                    cont.resume(t.result)
-                } else {
-                    cont.resumeWithException(
-                        t.exception ?: Exception("Ocurrió un error inesperado.")
-                    )
-                }
-            }
-        }
+    /** Escucha cambios de estado de autenticación y retorna una función para cancelar. */
+    fun escucharEstadoSesion(onCambio: (autenticado: Boolean) -> Unit): () -> Unit {
+        val listener = FirebaseAuth.AuthStateListener { onCambio(it.currentUser != null) }
+        auth.addAuthStateListener(listener)
+        return { auth.removeAuthStateListener(listener) }
+    }
 
     /** Traduce el error técnico de Firebase a un mensaje comprensible. */
     private fun mensajeComprensible(error: Exception): String {

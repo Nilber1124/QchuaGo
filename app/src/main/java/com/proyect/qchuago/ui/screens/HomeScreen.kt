@@ -32,11 +32,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.proyect.qchuago.R
-import com.proyect.qchuago.data.entidad.Usuario
 import com.proyect.qchuago.ui.navigation.Rutas
+import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 
 enum class NavTab(
     val title: String,
@@ -52,16 +53,10 @@ enum class NavTab(
 @Composable
 fun HomeScreen(
     navController: NavController,
-    usuario: Usuario?,
-    error: String?,
-    temaOscuro: Boolean,
-    onCambiarTema: (Boolean) -> Unit,
-    onCargarPerfil: () -> Unit,
-    onActualizarNombre: (String, () -> Unit) -> Unit,
-    onCambiarContrasena: (String, String, () -> Unit) -> Unit,
-    onCerrarSesion: () -> Unit,
+    authViewModel: AuthViewModel,
     modifier: Modifier = Modifier,
 ) {
+    val usuario by authViewModel.usuario.collectAsState()
     var selectedTab by rememberSaveable { mutableStateOf(NavTab.INICIO) }
 
     LaunchedEffect(usuario) {
@@ -91,16 +86,7 @@ fun HomeScreen(
                 NavTab.PROGRESO -> ProgresoScreen()
                 NavTab.DICCIONARIO -> DiccionarioScreen()
                 NavTab.REPASO -> RepasoScreen()
-                NavTab.PERFIL -> PerfilScreen(
-                    usuario = usuario,
-                    error = error,
-                    temaOscuro = temaOscuro,
-                    onCambiarTema = onCambiarTema,
-                    onCargarPerfil = onCargarPerfil,
-                    onActualizarNombre = onActualizarNombre,
-                    onCambiarContrasena = onCambiarContrasena,
-                    onCerrarSesion = onCerrarSesion
-                )
+                NavTab.PERFIL -> PerfilScreen(authViewModel = authViewModel)
             }
         }
     }
