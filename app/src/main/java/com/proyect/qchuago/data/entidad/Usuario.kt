@@ -21,4 +21,5 @@ data class Usuario(
     val vidas: Int = 5,
     val leccionesCompletadas: Int = 0,
     val totalLecciones: Int = 9,
+    val leccionesCompletadasIds: List<String> = emptyList(),
 )

@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Scripts de utilidad (no forman parte del proyecto Android)
+/scripts/
