@@ -13,3 +13,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Scripts Node.js
+scripts/node_modules/
+scripts/package-lock.json
+scripts/serviceAccountKey.json
