@@ -133,9 +133,16 @@ fun InicioScreen(
                     )
                 }
                 is EstadoCurso.Exito -> {
-                    val siguienteLeccionId = remember(leccionesCompletadasIds, estado.unidades) {
-                        estado.unidades.flatMap { it.lecciones }
-                            .firstOrNull { it.id !in leccionesCompletadasIds }?.id
+                    val siguienteLeccion = remember(leccionesCompletadasIds, estado.unidades) {
+                        estado.unidades
+                            .flatMap { unidad -> unidad.lecciones.map { unidad to it } }
+                            .firstOrNull { (unidad, leccion) ->
+                                !cursoViewModel.estaCompletada(
+                                    unidad,
+                                    leccion,
+                                    leccionesCompletadasIds,
+                                )
+                            }
                     }
                     LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
                         item(key = "encabezado_nivel") {
@@ -175,13 +182,15 @@ fun InicioScreen(
                                 key = { _, lec -> "lec_${unidad.id}_${lec.id}" },
                             ) { index, leccion ->
                                 val desbloqueada = cursoViewModel.estaDesbloqueada(
-                                    leccion, leccionesCompletadasIds
+                                    unidad, leccion, leccionesCompletadasIds
                                 )
                                 BurbujaLeccion(
                                     leccion = leccion,
                                     index = index,
                                     desbloqueada = desbloqueada,
-                                    esSiguiente = leccion.id == siguienteLeccionId,
+                                    esSiguiente = siguienteLeccion?.let { (siguienteUnidad, siguiente) ->
+                                        siguienteUnidad.id == unidad.id && siguiente.id == leccion.id
+                                    } == true,
                                     colorUnidad = parsearColor(unidad.colorHex),
                                 )
                             }

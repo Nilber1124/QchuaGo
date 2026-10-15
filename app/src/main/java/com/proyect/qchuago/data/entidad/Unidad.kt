@@ -22,4 +22,7 @@ data class Leccion(
     val icono: String = "",
     val orden: Int = 0,
     val tipo: String = "leccion",
-)
+) {
+    /** Identificador único de la lección dentro del curso. */
+    fun claveEn(unidadId: String): String = "$unidadId/$id"
+}

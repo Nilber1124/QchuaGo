@@ -73,25 +73,36 @@ class CursoViewModel(
 
     fun estaDesbloqueado(nivel: Nivel): Boolean = niveles.firstOrNull()?.id == nivel.id
 
-    fun estaDesbloqueada(leccion: Leccion, leccionesCompletadasIds: List<String>): Boolean {
+    fun estaDesbloqueada(
+        unidad: Unidad,
+        leccion: Leccion,
+        leccionesCompletadasIds: List<String>,
+    ): Boolean {
         val estado = _estadoCurso.value as? EstadoCurso.Exito ?: return false
-        for (unidad in estado.unidades) {
-            val indice = unidad.lecciones.indexOfFirst { it.id == leccion.id }
-            if (indice == -1) continue
-            // Todas las lecciones anteriores en esta unidad deben estar completadas
-            val leccionesPrevias = unidad.lecciones.take(indice)
-            val unidadesPrevias = estado.unidades.takeWhile { it.id != unidad.id }
-            val todasLasPreviasCompletadas =
-                unidadesPrevias.all { u -> u.lecciones.all { it.id in leccionesCompletadasIds } } &&
-                leccionesPrevias.all { it.id in leccionesCompletadasIds }
-            return todasLasPreviasCompletadas
+        val unidadActual = estado.unidades.firstOrNull { it.id == unidad.id } ?: return false
+        val indice = unidadActual.lecciones.indexOfFirst { it.id == leccion.id }
+        if (indice == -1) return false
+
+        val unidadesPrevias = estado.unidades.takeWhile { it.id != unidadActual.id }
+        val leccionesPrevias = unidadActual.lecciones.take(indice)
+        return unidadesPrevias.all { anterior ->
+            anterior.lecciones.all { estaCompletada(anterior, it, leccionesCompletadasIds) }
+        } && leccionesPrevias.all {
+            estaCompletada(unidadActual, it, leccionesCompletadasIds)
         }
-        return false
     }
 
     fun estaDesbloqueadaUnidad(unidad: Unidad, leccionesCompletadasIds: List<String>): Boolean {
         val estado = _estadoCurso.value as? EstadoCurso.Exito ?: return false
         val unidadesPrevias = estado.unidades.takeWhile { it.id != unidad.id }
-        return unidadesPrevias.all { u -> u.lecciones.all { it.id in leccionesCompletadasIds } }
+        return unidadesPrevias.all { anterior ->
+            anterior.lecciones.all { estaCompletada(anterior, it, leccionesCompletadasIds) }
+        }
     }
+
+    fun estaCompletada(
+        unidad: Unidad,
+        leccion: Leccion,
+        leccionesCompletadasIds: List<String>,
+    ): Boolean = leccion.claveEn(unidad.id) in leccionesCompletadasIds
 }

@@ -1,6 +1,6 @@
 # Estado del proyecto QchuaGo
 
-Última actualización: 14 de octubre de 2026.
+Última actualización: 15 de octubre de 2026.
 
 ## Arquitectura y tecnología
 
@@ -23,6 +23,12 @@
   - Al elegirlo se consultan las unidades cuyo `nivelId` coincide y se muestran todas con sus lecciones en el diseño existente.
   - La vista del curso incluye una acción para regresar a la selección de niveles.
   - Intermedio y Avanzado permanecen bloqueados porque RF14 todavía no registra lecciones completadas. No se simula progreso ni se agregó un sistema alternativo.
+- RF07 - Unidades y temas:
+  - Al seleccionar un nivel se muestran directamente todas sus unidades y lecciones, incluidas las bloqueadas.
+  - Las unidades se ordenan por `orden` y cada subcolección de lecciones se consulta ordenada por `orden`.
+  - El desbloqueo es secuencial: una unidad requiere completar todas las anteriores y una lección requiere completar las que la preceden.
+  - Las lecciones se identifican para el progreso mediante la clave `unidadId/leccionId`, evitando colisiones entre documentos de distintas unidades con el mismo ID.
+  - No existe acceso al contenido educativo porque RF05 todavía no está implementado.
 
 ## Flujo actual de RF06
 
@@ -36,9 +42,9 @@ No existe una pantalla intermedia para seleccionar unidades.
 ## Pendientes relacionados
 
 - RF14 debe definir y registrar la finalización real de lecciones antes de habilitar niveles posteriores.
-- Cuando RF14 esté disponible, el desbloqueo de niveles deberá reutilizar su progreso persistido.
+- Cuando RF14 esté disponible, deberá persistir en `leccionesCompletadasIds` las claves `unidadId/leccionId` y el desbloqueo de niveles deberá reutilizar ese progreso.
 - Faltan pruebas unitarias e instrumentadas específicas para el curso.
 
 ## Verificación
 
-- `gradlew.bat assembleDebug`: compilación correcta el 14 de octubre de 2026.
+- `gradlew.bat assembleDebug`: compilación correcta el 15 de octubre de 2026.
