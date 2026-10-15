@@ -13,7 +13,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,21 +23,26 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.proyect.qchuago.data.entidad.Leccion
+import com.proyect.qchuago.data.entidad.Nivel
 import com.proyect.qchuago.data.entidad.Unidad
 import com.proyect.qchuago.data.entidad.Usuario
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
@@ -90,7 +98,7 @@ fun InicioScreen(
                             CircularProgressIndicator()
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                text = "Cargando lecciones...",
+                                text = "Cargando curso...",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -111,11 +119,18 @@ fun InicioScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             Spacer(Modifier.height(16.dp))
-                            Button(onClick = { cursoViewModel.cargarUnidades() }) {
+                            Button(onClick = { cursoViewModel.reintentar() }) {
                                 Text("Reintentar")
                             }
                         }
                     }
+                }
+                is EstadoCurso.SeleccionNivel -> {
+                    SeleccionNiveles(
+                        niveles = estado.niveles,
+                        estaDesbloqueado = cursoViewModel::estaDesbloqueado,
+                        onNivelSeleccionado = cursoViewModel::seleccionarNivel,
+                    )
                 }
                 is EstadoCurso.Exito -> {
                     val siguienteLeccionId = remember(leccionesCompletadasIds, estado.unidades) {
@@ -123,6 +138,31 @@ fun InicioScreen(
                             .firstOrNull { it.id !in leccionesCompletadasIds }?.id
                     }
                     LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
+                        item(key = "encabezado_nivel") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Button(onClick = cursoViewModel::volverANiveles) {
+                                    Text("← Niveles")
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = estado.nivel.nombre,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Text(
+                                        text = "Todas las unidades del nivel",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                         estado.unidades.forEach { unidad ->
                             val unidadDesbloqueada = cursoViewModel.estaDesbloqueadaUnidad(
                                 unidad, leccionesCompletadasIds
@@ -150,6 +190,218 @@ fun InicioScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeleccionNiveles(
+    niveles: List<Nivel>,
+    estaDesbloqueado: (Nivel) -> Boolean,
+    onNivelSeleccionado: (Nivel) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxHeight()
+                .widthIn(max = 600.dp)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                EncabezadoSeleccionNivel()
+            }
+
+            if (niveles.isEmpty()) {
+                item {
+                    Text(
+                        text = "No hay niveles disponibles.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(vertical = 24.dp),
+                    )
+                }
+            }
+
+            itemsIndexed(
+                items = niveles,
+                key = { _, nivel -> nivel.id },
+            ) { indice, nivel ->
+                val desbloqueado = estaDesbloqueado(nivel)
+                TarjetaNivel(
+                    nivel = nivel,
+                    posicion = indice + 1,
+                    desbloqueado = desbloqueado,
+                    onClick = { onNivelSeleccionado(nivel) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EncabezadoSeleccionNivel(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp),
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            shape = RoundedCornerShape(50),
+        ) {
+            Text(
+                text = "TU RUTA DE APRENDIZAJE",
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.ExtraBold,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Selecciona tu nivel",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = "Empieza por lo básico y desbloquea nuevos retos.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun TarjetaNivel(
+    nivel: Nivel,
+    posicion: Int,
+    desbloqueado: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colorNivel = parsearColor(nivel.colorHex)
+    val colorPrincipal = if (desbloqueado) Color.White else MaterialTheme.colorScheme.onSurface
+    val colorSecundario = if (desbloqueado) {
+        Color.White.copy(alpha = 0.82f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(enabled = desbloqueado, onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (desbloqueado) colorNivel else MaterialTheme.colorScheme.surface,
+        ),
+        border = BorderStroke(
+            width = if (desbloqueado) 0.dp else 1.dp,
+            color = colorNivel.copy(alpha = 0.32f),
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (desbloqueado) 6.dp else 1.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(15.dp))
+                        .background(
+                            if (desbloqueado) Color.White.copy(alpha = 0.18f)
+                            else colorNivel.copy(alpha = 0.12f)
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = nivel.icono,
+                        fontSize = 27.sp,
+                        modifier = Modifier.alpha(if (desbloqueado) 1f else 0.62f),
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "NIVEL $posicion",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = colorSecundario,
+                    )
+                    Text(
+                        text = nivel.nombre,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = colorPrincipal,
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (desbloqueado) Color.White.copy(alpha = 0.18f)
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (desbloqueado) "→" else "🔒",
+                        fontSize = if (desbloqueado) 22.sp else 17.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = colorPrincipal,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(9.dp))
+            Text(
+                text = nivel.descripcion,
+                style = MaterialTheme.typography.bodySmall,
+                color = colorSecundario,
+            )
+
+            Spacer(Modifier.height(11.dp))
+            Surface(
+                color = if (desbloqueado) {
+                    Color.White.copy(alpha = 0.18f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
+                shape = RoundedCornerShape(50),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(if (desbloqueado) Color.White else colorNivel.copy(alpha = 0.55f)),
+                    )
+                    Spacer(Modifier.width(7.dp))
+                    Text(
+                        text = if (desbloqueado) "Disponible · Comenzar" else "Completa el nivel anterior",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = colorPrincipal,
+                    )
                 }
             }
         }

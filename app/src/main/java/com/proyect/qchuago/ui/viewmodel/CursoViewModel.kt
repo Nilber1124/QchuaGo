@@ -3,6 +3,7 @@ package com.proyect.qchuago.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.proyect.qchuago.data.entidad.Leccion
+import com.proyect.qchuago.data.entidad.Nivel
 import com.proyect.qchuago.data.entidad.Unidad
 import com.proyect.qchuago.data.servicio.CursoService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,8 +13,9 @@ import kotlinx.coroutines.launch
 
 sealed class EstadoCurso {
     object Cargando : EstadoCurso()
-    data class Exito(val unidades: List<Unidad>) : EstadoCurso()
-    data class Error(val mensaje: String) : EstadoCurso()
+    data class SeleccionNivel(val niveles: List<Nivel>) : EstadoCurso()
+    data class Exito(val nivel: Nivel, val unidades: List<Unidad>) : EstadoCurso()
+    data class Error(val mensaje: String, val nivel: Nivel? = null) : EstadoCurso()
 }
 
 class CursoViewModel(
@@ -22,19 +24,54 @@ class CursoViewModel(
 
     private val _estadoCurso = MutableStateFlow<EstadoCurso>(EstadoCurso.Cargando)
     val estadoCurso: StateFlow<EstadoCurso> = _estadoCurso.asStateFlow()
+    private var niveles: List<Nivel> = emptyList()
 
     init {
-        cargarUnidades()
+        cargarNiveles()
     }
 
-    fun cargarUnidades() {
+    fun cargarNiveles() {
         _estadoCurso.value = EstadoCurso.Cargando
         viewModelScope.launch {
-            cursoService.obtenerUnidades()
-                .onSuccess { _estadoCurso.value = EstadoCurso.Exito(it) }
-                .onFailure { _estadoCurso.value = EstadoCurso.Error("No se pudo cargar el curso. Inténtalo nuevamente.") }
+            cursoService.obtenerNiveles()
+                .onSuccess {
+                    niveles = it
+                    _estadoCurso.value = EstadoCurso.SeleccionNivel(it)
+                }
+                .onFailure {
+                    _estadoCurso.value = EstadoCurso.Error(
+                        "No se pudieron cargar los niveles. Inténtalo nuevamente."
+                    )
+                }
         }
     }
+
+    fun seleccionarNivel(nivel: Nivel) {
+        if (!estaDesbloqueado(nivel)) return
+
+        _estadoCurso.value = EstadoCurso.Cargando
+        viewModelScope.launch {
+            cursoService.obtenerUnidades(nivel.id)
+                .onSuccess { _estadoCurso.value = EstadoCurso.Exito(nivel, it) }
+                .onFailure {
+                    _estadoCurso.value = EstadoCurso.Error(
+                        mensaje = "No se pudieron cargar las unidades. Inténtalo nuevamente.",
+                        nivel = nivel,
+                    )
+                }
+        }
+    }
+
+    fun volverANiveles() {
+        _estadoCurso.value = EstadoCurso.SeleccionNivel(niveles)
+    }
+
+    fun reintentar() {
+        val nivel = (_estadoCurso.value as? EstadoCurso.Error)?.nivel
+        if (nivel == null) cargarNiveles() else seleccionarNivel(nivel)
+    }
+
+    fun estaDesbloqueado(nivel: Nivel): Boolean = niveles.firstOrNull()?.id == nivel.id
 
     fun estaDesbloqueada(leccion: Leccion, leccionesCompletadasIds: List<String>): Boolean {
         val estado = _estadoCurso.value as? EstadoCurso.Exito ?: return false
