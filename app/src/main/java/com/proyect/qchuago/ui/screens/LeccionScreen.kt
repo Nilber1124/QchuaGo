@@ -55,7 +55,7 @@ private val TIPOS_CONTENIDO = setOf("VOCABULARIO", "PRONUNCIACION")
 fun LeccionScreen(
     unidadId: String,
     leccionId: String,
-    onSalir: () -> Unit,
+    onSalir: (completada: Boolean) -> Unit,
     modifier: Modifier = Modifier,
     actividadesEstaticas: List<Actividad>? = null,
     uid: String? = null,
@@ -94,11 +94,11 @@ fun LeccionScreen(
             is EstadoLeccion.Error -> ErrorLeccion(
                 mensaje = estadoActual.mensaje,
                 onReintentar = leccionViewModel::reintentar,
-                onSalir = onSalir,
+                onSalir = { onSalir(false) },
             )
             is EstadoLeccion.EnCurso -> ContenidoLeccion(
                 estado = estadoActual,
-                onSalir = onSalir,
+                onSalir = { onSalir(false) },
                 onSeleccionarOpcion = leccionViewModel::seleccionarOpcion,
                 onActualizarTexto = leccionViewModel::actualizarTexto,
                 onAgregarElemento = leccionViewModel::agregarElemento,
@@ -123,7 +123,7 @@ fun LeccionScreen(
             is EstadoLeccion.Finalizada -> ResultadoLeccion(
                 correctas = estadoActual.correctas,
                 totalEvaluables = estadoActual.totalEvaluables,
-                onVolver = onSalir,
+                onVolver = { onSalir(true) },
             )
         }
     }

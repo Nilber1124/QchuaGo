@@ -114,7 +114,7 @@ fun AppNavigation(
                 unidadId = "prueba-nivel",
                 leccionId = "demo",
                 actividadesEstaticas = ActividadesPruebaNivel.lista,
-                onSalir = {
+                onSalir = { _ ->
                     authViewModel.actualizarUsuario({ it.copy(onboardingCompletado = true) })
                     navController.navigate(Rutas.HOME) {
                         popUpTo(navController.graph.id) { inclusive = true }
@@ -141,7 +141,18 @@ fun AppNavigation(
                 unidadId = unidadId,
                 leccionId = leccionId,
                 uid = usuario?.uid,
-                onSalir = { navController.popBackStack() },
+                onSalir = { completada ->
+                    val clave = "$unidadId/$leccionId"
+                    if (completada && usuario?.leccionesCompletadasIds?.contains(clave) != true) {
+                        authViewModel.actualizarUsuario { u ->
+                            u.copy(
+                                leccionesCompletadasIds = u.leccionesCompletadasIds + clave,
+                                leccionesCompletadas = u.leccionesCompletadasIds.size + 1,
+                            )
+                        }
+                    }
+                    navController.popBackStack()
+                },
             )
         }
     }

@@ -83,7 +83,7 @@ fun HomeScreen(
         ) {
             when (selectedTab) {
                 NavTab.INICIO -> InicioScreen(authViewModel = authViewModel, navController = navController)
-                NavTab.PROGRESO -> ProgresoScreen()
+                NavTab.PROGRESO -> ProgresoScreen(authViewModel = authViewModel, navController = navController)
                 NavTab.DICCIONARIO -> DiccionarioScreen()
                 NavTab.REPASO -> RepasoScreen()
                 NavTab.PERFIL -> PerfilScreen(authViewModel = authViewModel)

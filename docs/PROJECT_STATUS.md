@@ -34,15 +34,25 @@
 - Pantalla Home con las pestañas Inicio, Progreso, Diccionario, Repaso y Perfil.
 - Perfil de usuario, estadísticas y preferencia de tema.
 - Curso cargado desde Firestore con unidades y subcolecciones de lecciones.
-- RF06 - Niveles de aprendizaje:
-  - Ya no existe una pantalla de "Selecciona tu nivel": `CursoViewModel.cargarCurso()`
-    lee la colección `niveles` (ordenada por `orden`, solo `activo == true`) y
-    **auto-selecciona el primer nivel** (Básico en los datos actuales), consultando
-    directo sus unidades (`nivelId` coincide) y mostrando el mapa de unidades/lecciones.
-  - La colección Firestore `niveles` sigue existiendo tal cual (Básico/Intermedio/
-    Avanzado); solo se eliminó la UI manual de elección y el botón "← Niveles" para
-    volver a ella. Intermedio y Avanzado quedan simplemente sin usar hasta que RF14
-    implemente progreso real y una forma de cambiar de nivel.
+- RF06 - Niveles de aprendizaje (**aclaración de alcance, 17 de octubre de 2026**: por
+  "nivel" el requerimiento se refiere a cada paso/lección dentro de una misma unidad —
+  ej. completar la lección de saludo desbloquea la siguiente de esa unidad — **no** a
+  las dificultades Básico/Intermedio/Avanzado de la colección Firestore `niveles`, que
+  es un concepto distinto y nunca fue parte de este requerimiento):
+  - **Cumplido.** El desbloqueo secuencial lección-a-lección (y unidad-a-unidad) ya
+    estaba implementado por RF07 en `CursoViewModel.estaDesbloqueada` /
+    `estaDesbloqueadaUnidad` / `estaCompletada`, pero quedaba inerte porque nada
+    marcaba `Usuario.leccionesCompletadasIds`. RF14 (ver más abajo) cerró ese hueco:
+    ahora, al terminar una lección real, `AppNavigation` agrega su clave
+    `unidadId/leccionId` a esa lista, lo que activa el desbloqueo de la siguiente
+    lección/unidad automáticamente (reactivo vía `StateFlow`, sin recargar la app).
+  - Ya no existe una pantalla de "Selecciona tu nivel" (Básico/Intermedio/Avanzado):
+    `CursoViewModel.cargarCurso()` lee la colección `niveles` (ordenada por `orden`,
+    solo `activo == true`) y **auto-selecciona el primer nivel**, consultando directo
+    sus unidades (`nivelId` coincide) y mostrando el mapa de unidades/lecciones. La
+    colección Firestore `niveles` sigue existiendo tal cual (Básico/Intermedio/
+    Avanzado) por si se retoma más adelante, pero Intermedio y Avanzado no son
+    alcanzables desde la UI — eso es una decisión aparte, no forma parte de RF06.
 - RF07 - Unidades y temas:
   - Al seleccionar un nivel se muestran directamente todas sus unidades y lecciones, incluidas las bloqueadas.
   - Las unidades se ordenan por `orden` y cada subcolección de lecciones se consulta ordenada por `orden`.
@@ -78,19 +88,51 @@
     campo (reutiliza `onCambiarTexto`, sin cambios en `LeccionViewModel`). Si una
     actividad `COMPLETAR` no tiene `opciones`, el campo sigue siendo texto libre como
     antes (compatible con contenido existente).
+- RF14 - Seguimiento del progreso:
+  - Una lección real (`Rutas.LECCION`, no la de "Test de nivel") queda marcada como
+    completada al llegar a `EstadoLeccion.Finalizada` y presionar "Volver" en
+    `ResultadoLeccion` (reaching the end cuenta como completar, sin importar el
+    puntaje — igual que ya hacía el onboarding con el test de nivel). `LeccionScreen`
+    expone esto cambiando `onSalir` a `(completada: Boolean) -> Unit`; `AppNavigation`
+    agrega la clave `unidadId/leccionId` a `Usuario.leccionesCompletadasIds` (vía
+    `AuthViewModel.actualizarUsuario`, evitando duplicados) y sincroniza
+    `leccionesCompletadas` con el tamaño de esa lista. Salir sin terminar (✕ o error)
+    nunca marca nada.
+  - `ProgresoScreen.kt` dejó de ser un placeholder: reutiliza el mismo
+    `CursoViewModel` que `InicioScreen` (comparten `ViewModelStoreOwner` dentro de
+    `HomeScreen`, así que comparten el curso ya cargado y la lógica de
+    bloqueo/completado de RF07 sin duplicarla). Muestra: porcentaje de avance del
+    nivel actual, lecciones y unidades completadas, una tarjeta "Continuar
+    aprendiendo" que navega directo a la siguiente lección pendiente (mismo cálculo
+    de `siguienteLeccion` que ya usaba `InicioScreen` para resaltar la burbuja "¡!"),
+    y el detalle de avance por unidad.
+  - **Alcance deliberado**: el porcentaje se calcula solo para el nivel accesible hoy
+    (el que auto-selecciona `CursoViewModel`). Intermedio y Avanzado (las dificultades
+    de la colección `niveles`, no relacionadas con RF06) no tienen unidades cargadas
+    en Firestore todavía y no son alcanzables en la UI, así que no se les calcula
+    progreso por separado; si en el futuro se decide hacerlos alcanzables,
+    `ProgresoScreen` tendría que iterar sobre varios niveles en lugar de uno solo.
+  - No se construyó una pantalla de historial de respuestas individuales (eso viviría
+    sobre `usuarios/{uid}/respuestas` de RF08); "resultados" se cubre con los
+    porcentajes y conteos agregados.
 
-## Flujo actual de RF06
+## Flujo actual al entrar a Inicio
 
 ```text
-INICIO -> (auto-selecciona el primer nivel activo) -> Todas las unidades y lecciones del nivel
+INICIO -> (auto-selecciona el primer nivel activo de la colección `niveles`) ->
+Todas las unidades y lecciones de ese nivel, con desbloqueo secuencial lección a
+lección y unidad a unidad (RF06+RF07+RF14)
 ```
 
-No existe pantalla de selección de nivel ni de selección de unidades.
+No existe pantalla de selección de nivel (Básico/Intermedio/Avanzado) ni de selección
+de unidades — eso nunca fue parte de RF06; RF06 es el desbloqueo secuencial dentro del
+mapa de unidades/lecciones, que ya funciona de punta a punta.
 
 ## Pendientes relacionados
 
-- RF14 debe definir y registrar la finalización real de lecciones antes de habilitar niveles posteriores.
-- Cuando RF14 esté disponible, deberá persistir en `leccionesCompletadasIds` las claves `unidadId/leccionId` y el desbloqueo de niveles deberá reutilizar ese progreso.
+- Intermedio y Avanzado (dificultades de la colección `niveles`) siguen sin contenido
+  y sin ser alcanzables desde la UI; es una decisión explícita del usuario al
+  simplificar la selección de nivel, no un requerimiento pendiente de RF06.
 - El resultado del "Test de nivel" del onboarding (aciertos sobre `ActividadesPruebaNivel`) todavía no determina el nivel inicial real del usuario; queda para una iteración futura.
 - Faltan pruebas unitarias e instrumentadas específicas para el curso.
 
@@ -100,3 +142,4 @@ No existe pantalla de selección de nivel ni de selección de unidades.
 - `./gradlew assembleDebug`: compilación correcta el 16 de octubre de 2026 tras el rediseño del onboarding (bienvenida + elección de nivel).
 - `./gradlew assembleDebug`: compilación correcta el 16 de octubre de 2026 tras eliminar la pantalla "Selecciona tu nivel" de RF06 (auto-selección del primer nivel).
 - `./gradlew assembleDebug`: compilación correcta el 17 de octubre de 2026 tras agregar el tipo `ASOCIAR` y el registro de respuestas (RF08).
+- `./gradlew assembleDebug`: compilación correcta el 17 de octubre de 2026 tras implementar el marcado de lecciones completadas y la pantalla de Progreso real (RF14).
