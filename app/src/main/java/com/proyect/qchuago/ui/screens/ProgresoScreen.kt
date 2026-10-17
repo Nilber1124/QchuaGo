@@ -40,6 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.proyect.qchuago.data.entidad.Unidad
 import com.proyect.qchuago.ui.navigation.Rutas
+import com.proyect.qchuago.ui.theme.colorDesdeHex
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 import com.proyect.qchuago.ui.viewmodel.CursoViewModel
 import com.proyect.qchuago.ui.viewmodel.EstadoCurso
@@ -117,7 +118,7 @@ fun ProgresoScreen(
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            text = estado.nivel.nombre,
+                            text = "Unidades y lecciones completadas",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -191,7 +192,7 @@ private fun TarjetaResumenProgreso(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Avance del nivel",
+                    text = "Avance general",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                 )
@@ -294,7 +295,7 @@ private fun TarjetaContinuar(
                 Text("🎉", fontSize = 26.sp)
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    text = "¡Completaste todas las lecciones de este nivel!",
+                    text = "¡Completaste todas las lecciones disponibles!",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleSmall,
@@ -312,11 +313,7 @@ private fun FilaUnidadProgreso(
     modifier: Modifier = Modifier,
 ) {
     val progreso = if (total > 0) completadas.toFloat() / total else 0f
-    val colorUnidad = try {
-        Color(android.graphics.Color.parseColor(unidad.colorHex))
-    } catch (e: Exception) {
-        MaterialTheme.colorScheme.primary
-    }
+    val colorUnidad = colorDesdeHex(unidad.colorHex, MaterialTheme.colorScheme.primary)
 
     Surface(
         color = MaterialTheme.colorScheme.surface,

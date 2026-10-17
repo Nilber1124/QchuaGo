@@ -25,23 +25,37 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.proyect.qchuago.R
 import com.proyect.qchuago.data.entidad.Usuario
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
+import com.proyect.qchuago.ui.viewmodel.CursoViewModel
+import com.proyect.qchuago.ui.viewmodel.EstadoCurso
 
 @Composable
 fun PerfilScreen(
     authViewModel: AuthViewModel,
+    cursoViewModel: CursoViewModel = viewModel(),
     modifier: Modifier = Modifier,
 ) {
     val usuario by authViewModel.usuario.collectAsState()
     val error by authViewModel.error.collectAsState()
     val temaOscuro by authViewModel.temaOscuro.collectAsState()
+    val estadoCurso by cursoViewModel.estadoCurso.collectAsState()
+
+    val leccionesCompletadasIds = usuario?.leccionesCompletadasIds ?: emptyList()
+    val estadoExito = estadoCurso as? EstadoCurso.Exito
+    val totalLeccionesReal = estadoExito?.unidades?.sumOf { it.lecciones.size } ?: 0
+    val leccionesCompletadasReal = estadoExito?.unidades?.sumOf { unidad ->
+        unidad.lecciones.count { cursoViewModel.estaCompletada(unidad, it, leccionesCompletadasIds) }
+    } ?: 0
 
     PerfilScreen(
         usuario = usuario,
         error = error,
         temaOscuro = temaOscuro,
+        leccionesCompletadas = leccionesCompletadasReal,
+        totalLecciones = totalLeccionesReal,
         onCambiarTema = authViewModel::cambiarTema,
         onActualizarNombre = authViewModel::actualizarNombre,
         onCambiarContrasena = authViewModel::cambiarContrasena,
@@ -55,6 +69,8 @@ fun PerfilScreen(
     usuario: Usuario?,
     error: String?,
     temaOscuro: Boolean,
+    leccionesCompletadas: Int,
+    totalLecciones: Int,
     onCambiarTema: (Boolean) -> Unit,
     onActualizarNombre: (String, () -> Unit) -> Unit,
     onCambiarContrasena: (String, String, () -> Unit) -> Unit,
@@ -71,8 +87,8 @@ fun PerfilScreen(
     val nombre = perfil.nombre.ifBlank { "Usuario" }
     val correo = perfil.correo.ifBlank { "Correo no disponible" }
     val iniciales = nombre.take(2).uppercase().ifEmpty { "US" }
-    // Calculamos el porcentaje de avance una sola vez.
-    val progreso = if (perfil.totalLecciones > 0) perfil.leccionesCompletadas.toFloat() / perfil.totalLecciones else 0f
+    // Calculamos el porcentaje de avance una sola vez, con el progreso real del curso.
+    val progreso = if (totalLecciones > 0) leccionesCompletadas.toFloat() / totalLecciones else 0f
     val porcentaje = (progreso * 100).toInt()
 
     Column(
@@ -108,10 +124,10 @@ fun PerfilScreen(
                 texto = "ESTADÍSTICAS",
                 modifier = Modifier.padding(vertical = 8.dp)
             )
-            EstadisticasPerfil(perfil)
+            EstadisticasPerfil(perfil, leccionesCompletadas, totalLecciones)
 
             Spacer(Modifier.height(16.dp))
-            TarjetaProgreso(perfil, progreso, porcentaje)
+            TarjetaProgreso(leccionesCompletadas, totalLecciones, progreso, porcentaje)
 
             Spacer(Modifier.height(24.dp))
             TituloSeccion(
@@ -283,7 +299,7 @@ private fun TituloSeccion(
 }
 
 @Composable
-private fun EstadisticasPerfil(usuario: Usuario) {
+private fun EstadisticasPerfil(usuario: Usuario, leccionesCompletadas: Int, totalLecciones: Int) {
     val racha = if (usuario.racha == 1) "1 día" else "${usuario.racha} días"
 
     Row(
@@ -314,7 +330,7 @@ private fun EstadisticasPerfil(usuario: Usuario) {
     ) {
         TarjetaEstadistica(
             icono = R.drawable.ic_perfil_lecciones,
-            valor = "${usuario.leccionesCompletadas}/${usuario.totalLecciones}",
+            valor = "$leccionesCompletadas/$totalLecciones",
             etiqueta = "Lecciones",
             colorValor = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f)
@@ -374,7 +390,8 @@ private fun TarjetaEstadistica(
 
 @Composable
 private fun TarjetaProgreso(
-    usuario: Usuario,
+    leccionesCompletadas: Int,
+    totalLecciones: Int,
     progreso: Float,
     porcentaje: Int
 ) {
@@ -425,7 +442,7 @@ private fun TarjetaProgreso(
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text = "${usuario.leccionesCompletadas} de ${usuario.totalLecciones} lecciones completadas",
+                text = "$leccionesCompletadas de $totalLecciones lecciones completadas",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

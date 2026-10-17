@@ -4,17 +4,32 @@ import androidx.annotation.Keep
 import com.google.firebase.firestore.DocumentId
 
 /**
+ * Tipo de paso dentro de una lección. Firestore deserializa el campo `tipo` por el
+ * nombre de la constante (igual que hacía con el string equivalente), así que los
+ * documentos existentes ("VOCABULARIO", "SELECCION", etc.) siguen funcionando sin
+ * migración.
+ */
+enum class TipoActividad {
+    VOCABULARIO,
+    PRONUNCIACION,
+    SELECCION,
+    COMPLETAR,
+    ORDENAR,
+    ASOCIAR,
+}
+
+/**
  * Paso dentro de una lección. El campo [tipo] decide qué subconjunto de campos
- * se usa: "VOCABULARIO"/"PRONUNCIACION" usan quechua/traduccion/explicacion/audio;
- * "SELECCION"/"COMPLETAR"/"ORDENAR"/"ASOCIAR" usan enunciado y las respuestas.
- * "ASOCIAR" empareja cada palabra de [elementos] (quechua) con su traducción
+ * se usa: VOCABULARIO/PRONUNCIACION usan quechua/traduccion/explicacion/audio;
+ * SELECCION/COMPLETAR/ORDENAR/ASOCIAR usan enunciado y las respuestas.
+ * ASOCIAR empareja cada palabra de [elementos] (quechua) con su traducción
  * correcta en [respuestasCorrectas] (mismo índice); [opciones] contiene las
  * traducciones ya mezcladas para mostrar como columna derecha.
  */
 @Keep
 data class Actividad(
     @DocumentId val id: String = "",
-    val tipo: String = "",
+    val tipo: TipoActividad = TipoActividad.VOCABULARIO,
     val orden: Int = 0,
     val activo: Boolean = true,
 

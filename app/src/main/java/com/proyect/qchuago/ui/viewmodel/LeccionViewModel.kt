@@ -3,6 +3,7 @@ package com.proyect.qchuago.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.proyect.qchuago.data.entidad.Actividad
+import com.proyect.qchuago.data.entidad.TipoActividad
 import com.proyect.qchuago.data.servicio.AudioService
 import com.proyect.qchuago.data.servicio.CursoService
 import com.proyect.qchuago.data.servicio.FirestoreService
@@ -11,7 +12,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-private val TIPOS_EVALUABLES = setOf("SELECCION", "COMPLETAR", "ORDENAR", "ASOCIAR")
+private val TIPOS_EVALUABLES = setOf(
+    TipoActividad.SELECCION,
+    TipoActividad.COMPLETAR,
+    TipoActividad.ORDENAR,
+    TipoActividad.ASOCIAR,
+)
 
 sealed class EstadoLeccion {
     object Cargando : EstadoLeccion()
@@ -160,14 +166,14 @@ class LeccionViewModel(
         val actividad = estado.actividadActual
 
         val esCorrecta = when (actividad.tipo) {
-            "SELECCION" -> estado.respuestaSeleccionada == actividad.respuestaCorrecta
-            "COMPLETAR" -> estado.textoIngresado.trim()
+            TipoActividad.SELECCION -> estado.respuestaSeleccionada == actividad.respuestaCorrecta
+            TipoActividad.COMPLETAR -> estado.textoIngresado.trim()
                 .equals(actividad.respuestaCorrecta.trim(), ignoreCase = true)
-            "ORDENAR" -> estado.ordenActual == actividad.respuestasCorrectas
-            "ASOCIAR" -> actividad.elementos.indices.map { i ->
+            TipoActividad.ORDENAR -> estado.ordenActual == actividad.respuestasCorrectas
+            TipoActividad.ASOCIAR -> actividad.elementos.indices.map { i ->
                 estado.pares[i]?.let { actividad.opciones.getOrNull(it) }
             } == actividad.respuestasCorrectas
-            else -> return
+            TipoActividad.VOCABULARIO, TipoActividad.PRONUNCIACION -> return
         }
 
         _estadoLeccion.value = estado.copy(

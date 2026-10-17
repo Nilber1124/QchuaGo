@@ -62,6 +62,7 @@ import com.proyect.qchuago.data.entidad.Leccion
 import com.proyect.qchuago.data.entidad.Unidad
 import com.proyect.qchuago.data.entidad.Usuario
 import com.proyect.qchuago.ui.navigation.Rutas
+import com.proyect.qchuago.ui.theme.colorDesdeHex
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 import com.proyect.qchuago.ui.viewmodel.CursoViewModel
 import com.proyect.qchuago.ui.viewmodel.EstadoCurso
@@ -134,19 +135,19 @@ fun InicioScreen(
                             }
                     }
                     LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
-                        item(key = "encabezado_nivel") {
+                        item(key = "encabezado_curso") {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 10.dp),
                             ) {
                                 Text(
-                                    text = estado.nivel.nombre,
+                                    text = "Tu aprendizaje",
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold,
                                 )
                                 Text(
-                                    text = "Todas las unidades del nivel",
+                                    text = "Todas las unidades y lecciones",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -173,7 +174,7 @@ fun InicioScreen(
                                     esSiguiente = siguienteLeccion?.let { (siguienteUnidad, siguiente) ->
                                         siguienteUnidad.id == unidad.id && siguiente.id == leccion.id
                                     } == true,
-                                    colorUnidad = parsearColor(unidad.colorHex),
+                                    colorUnidad = colorDesdeHex(unidad.colorHex),
                                     onClick = {
                                         navController.navigate("${Rutas.LECCION}/${unidad.id}/${leccion.id}")
                                     },
@@ -265,7 +266,7 @@ private fun BannerUnidad(
     desbloqueada: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val colorFondo = if (desbloqueada) parsearColor(unidad.colorHex) else Color(0xFF9E9E9E)
+    val colorFondo = if (desbloqueada) colorDesdeHex(unidad.colorHex) else Color(0xFF9E9E9E)
 
     Box(
         modifier = modifier
@@ -459,12 +460,6 @@ private fun BurbujaLeccion(
             )
         }
     }
-}
-
-private fun parsearColor(hex: String): Color = try {
-    Color(android.graphics.Color.parseColor(hex))
-} catch (e: Exception) {
-    Color(0xFF388E3C)
 }
 
 private fun nivelANumero(nivel: String?): Int = when (nivel?.lowercase()) {

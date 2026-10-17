@@ -11,7 +11,6 @@ data class Unidad(
     val icono: String = "",
     val colorHex: String = "",
     val orden: Int = 0,
-    val nivelId: String = "",
     val lecciones: List<Leccion> = emptyList(),
 )
 

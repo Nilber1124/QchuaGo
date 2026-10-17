@@ -1,6 +1,7 @@
 package com.proyect.qchuago.ui.viewmodel
 
 import com.proyect.qchuago.data.entidad.Actividad
+import com.proyect.qchuago.data.entidad.TipoActividad
 
 /**
  * Contenido estático de demostración para el "Test de nivel" del onboarding.
@@ -11,7 +12,7 @@ object ActividadesPruebaNivel {
     val lista: List<Actividad> = listOf(
         Actividad(
             id = "1",
-            tipo = "VOCABULARIO",
+            tipo = TipoActividad.VOCABULARIO,
             orden = 1,
             quechua = "Allin p'unchay",
             traduccion = "Buenos días",
@@ -19,7 +20,7 @@ object ActividadesPruebaNivel {
         ),
         Actividad(
             id = "2",
-            tipo = "SELECCION",
+            tipo = TipoActividad.SELECCION,
             orden = 2,
             enunciado = "¿Cómo se dice 'gracias' en quechua?",
             opciones = listOf("Yupaychani", "Allillanchu", "Ñuqa", "Kunan"),
@@ -27,7 +28,7 @@ object ActividadesPruebaNivel {
         ),
         Actividad(
             id = "3",
-            tipo = "COMPLETAR",
+            tipo = TipoActividad.COMPLETAR,
             orden = 3,
             enunciado = "Completa: '_____, imaynallan kashanki?' (Hola, ¿cómo estás?)",
             opciones = listOf("Napaykullayki", "Rimaykullayki", "Añay"),
@@ -35,7 +36,7 @@ object ActividadesPruebaNivel {
         ),
         Actividad(
             id = "4",
-            tipo = "ORDENAR",
+            tipo = TipoActividad.ORDENAR,
             orden = 4,
             enunciado = "Ordena las palabras para formar: 'Yo aprendo quechua'",
             elementos = listOf("Ñuqa", "qichwata", "yachakuni"),
@@ -43,7 +44,7 @@ object ActividadesPruebaNivel {
         ),
         Actividad(
             id = "5",
-            tipo = "ASOCIAR",
+            tipo = TipoActividad.ASOCIAR,
             orden = 5,
             enunciado = "Empareja cada palabra en quechua con su traducción",
             elementos = listOf("Yaku", "Inti", "Killa"),

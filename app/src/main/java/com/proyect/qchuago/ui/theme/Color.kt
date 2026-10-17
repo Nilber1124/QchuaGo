@@ -34,3 +34,13 @@ val DarkOnBackground = Color(0xFFE0E0E0)
 val DarkOnSurface = Color(0xFFE0E0E0)
 val DarkSurfaceVariant = Color(0xFF2C2C2C)
 val DarkOnSurfaceVariant = Color(0xFFA0A0A0)
+
+/** Color por defecto cuando [colorDesdeHex] no puede parsear el hex. */
+val ColorUnidadPorDefecto = Color(0xFF388E3C)
+
+/** Parsea un color hex (p. ej. `colorHex` de una unidad) o devuelve [fallback] si no es válido. */
+fun colorDesdeHex(hex: String, fallback: Color = ColorUnidadPorDefecto): Color = try {
+    Color(android.graphics.Color.parseColor(hex))
+} catch (e: IllegalArgumentException) {
+    fallback
+}
