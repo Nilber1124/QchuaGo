@@ -19,20 +19,35 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.proyect.qchuago.R
+import com.proyect.qchuago.data.entidad.Usuario
+import com.proyect.qchuago.ui.screens.BienvenidaScreen
+import com.proyect.qchuago.ui.screens.ElegirNivelScreen
 import com.proyect.qchuago.ui.screens.HomeScreen
+import com.proyect.qchuago.ui.screens.LeccionScreen
 import com.proyect.qchuago.ui.screens.LoginScreen
 import com.proyect.qchuago.ui.screens.RegisterScreen
+import com.proyect.qchuago.ui.viewmodel.ActividadesPruebaNivel
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 
 object Rutas {
     const val SPLASH = "splash"
     const val LOGIN = "login"
     const val REGISTRO = "registro"
+    const val BIENVENIDA = "bienvenida"
+    const val ELEGIR_NIVEL = "elegir_nivel"
+    const val PRUEBA_NIVEL = "prueba_nivel"
     const val HOME = "home"
+    const val LECCION = "leccion"
+
+    /** Decide a dónde navegar tras autenticar: bienvenida la primera vez, Home después. */
+    fun destinoTrasAutenticar(usuario: Usuario): String =
+        if (usuario.onboardingCompletado) HOME else BIENVENIDA
 }
 
 @Composable
@@ -44,10 +59,11 @@ fun AppNavigation(
     val sesionInicializada by authViewModel.sesionInicializada.collectAsState()
     val usuario by authViewModel.usuario.collectAsState()
 
-    // Cuando se comprueba la sesión al arrancar, salta a Login o Home.
+    // Cuando se comprueba la sesión al arrancar, salta a Login, Bienvenida o Home.
     LaunchedEffect(sesionInicializada) {
         if (sesionInicializada) {
-            navController.navigate(if (usuario != null) Rutas.HOME else Rutas.LOGIN) {
+            val destino = usuario?.let { Rutas.destinoTrasAutenticar(it) } ?: Rutas.LOGIN
+            navController.navigate(destino) {
                 popUpTo(navController.graph.id) { inclusive = true }
             }
         }
@@ -71,10 +87,60 @@ fun AppNavigation(
                 authViewModel = authViewModel,
             )
         }
+        composable(Rutas.BIENVENIDA) {
+            val usuarioActual by authViewModel.usuario.collectAsState()
+            BienvenidaScreen(
+                usuario = usuarioActual,
+                onEmpezar = {
+                    navController.navigate(Rutas.ELEGIR_NIVEL) {
+                        popUpTo(Rutas.BIENVENIDA) { inclusive = true }
+                    }
+                },
+            )
+        }
+        composable(Rutas.ELEGIR_NIVEL) {
+            ElegirNivelScreen(
+                onPrincipiante = {
+                    authViewModel.actualizarUsuario({ it.copy(onboardingCompletado = true) })
+                    navController.navigate(Rutas.HOME) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
+                },
+                onTestNivel = { navController.navigate(Rutas.PRUEBA_NIVEL) },
+            )
+        }
+        composable(Rutas.PRUEBA_NIVEL) {
+            LeccionScreen(
+                unidadId = "prueba-nivel",
+                leccionId = "demo",
+                actividadesEstaticas = ActividadesPruebaNivel.lista,
+                onSalir = {
+                    authViewModel.actualizarUsuario({ it.copy(onboardingCompletado = true) })
+                    navController.navigate(Rutas.HOME) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
+                },
+            )
+        }
         composable(Rutas.HOME) {
             HomeScreen(
                 navController = navController,
                 authViewModel = authViewModel,
+            )
+        }
+        composable(
+            route = "${Rutas.LECCION}/{unidadId}/{leccionId}",
+            arguments = listOf(
+                navArgument("unidadId") { type = NavType.StringType },
+                navArgument("leccionId") { type = NavType.StringType },
+            ),
+        ) { backStackEntry ->
+            val unidadId = backStackEntry.arguments?.getString("unidadId") ?: return@composable
+            val leccionId = backStackEntry.arguments?.getString("leccionId") ?: return@composable
+            LeccionScreen(
+                unidadId = unidadId,
+                leccionId = leccionId,
+                onSalir = { navController.popBackStack() },
             )
         }
     }

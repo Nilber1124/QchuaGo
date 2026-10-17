@@ -2,6 +2,7 @@ package com.proyect.qchuago.data.servicio
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.proyect.qchuago.data.entidad.Actividad
 import com.proyect.qchuago.data.entidad.Leccion
 import com.proyect.qchuago.data.entidad.Nivel
 import com.proyect.qchuago.data.entidad.Unidad
@@ -41,6 +42,20 @@ class CursoService {
             unidad.copy(lecciones = lecciones)
         }.sortedBy { it.orden }
         Result.success(unidades)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun obtenerActividades(unidadId: String, leccionId: String): Result<List<Actividad>> = try {
+        val snapshot = esperar(
+            unidadesCollection.document(unidadId)
+                .collection("lecciones").document(leccionId)
+                .collection("actividades")
+                .orderBy("orden", Query.Direction.ASCENDING)
+                .get()
+        )
+        val actividades = snapshot.toObjects(Actividad::class.java).filter { it.activo }
+        Result.success(actividades)
     } catch (e: Exception) {
         Result.failure(e)
     }

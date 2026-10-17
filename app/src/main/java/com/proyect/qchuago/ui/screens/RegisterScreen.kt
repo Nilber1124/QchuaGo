@@ -76,8 +76,8 @@ fun RegisterScreen(
     val errorVisible = mensajeError ?: error
 
     LaunchedEffect(usuario) {
-        if (usuario != null) {
-            navController.navigate(Rutas.HOME) {
+        usuario?.let {
+            navController.navigate(Rutas.destinoTrasAutenticar(it)) {
                 popUpTo(navController.graph.id) { inclusive = true }
             }
         }

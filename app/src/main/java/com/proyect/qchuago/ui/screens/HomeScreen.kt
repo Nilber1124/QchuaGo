@@ -82,7 +82,7 @@ fun HomeScreen(
                 .padding(innerPadding)
         ) {
             when (selectedTab) {
-                NavTab.INICIO -> InicioScreen(authViewModel = authViewModel)
+                NavTab.INICIO -> InicioScreen(authViewModel = authViewModel, navController = navController)
                 NavTab.PROGRESO -> ProgresoScreen()
                 NavTab.DICCIONARIO -> DiccionarioScreen()
                 NavTab.REPASO -> RepasoScreen()
