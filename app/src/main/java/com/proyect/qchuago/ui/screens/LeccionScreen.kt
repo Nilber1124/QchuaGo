@@ -58,6 +58,7 @@ fun LeccionScreen(
     onSalir: () -> Unit,
     modifier: Modifier = Modifier,
     actividadesEstaticas: List<Actividad>? = null,
+    uid: String? = null,
 ) {
     val context = LocalContext.current
     val leccionViewModel: LeccionViewModel = viewModel(
@@ -70,6 +71,7 @@ fun LeccionScreen(
                     leccionId = leccionId,
                     audioService = AudioService(context.applicationContext),
                     actividadesEstaticas = actividadesEstaticas,
+                    uid = uid,
                 ) as T
             }
         },
@@ -101,6 +103,8 @@ fun LeccionScreen(
                 onActualizarTexto = leccionViewModel::actualizarTexto,
                 onAgregarElemento = leccionViewModel::agregarElemento,
                 onQuitarUltimoElemento = leccionViewModel::quitarUltimoElemento,
+                onSeleccionarElementoAsociar = leccionViewModel::seleccionarElementoAsociar,
+                onSeleccionarOpcionAsociar = leccionViewModel::seleccionarOpcionAsociar,
                 onComprobar = leccionViewModel::comprobar,
                 onContinuar = leccionViewModel::continuar,
                 onReproducirAudio = leccionViewModel::reproducirAudio,
@@ -175,6 +179,8 @@ private fun ContenidoLeccion(
     onActualizarTexto: (String) -> Unit,
     onAgregarElemento: (String) -> Unit,
     onQuitarUltimoElemento: () -> Unit,
+    onSeleccionarElementoAsociar: (Int) -> Unit,
+    onSeleccionarOpcionAsociar: (Int) -> Unit,
     onComprobar: () -> Unit,
     onContinuar: () -> Unit,
     onReproducirAudio: () -> Unit,
@@ -226,6 +232,14 @@ private fun ContenidoLeccion(
                     verificada = estado.verificada,
                     onAgregarElemento = onAgregarElemento,
                     onQuitarUltimoElemento = onQuitarUltimoElemento,
+                )
+                "ASOCIAR" -> TarjetaAsociar(
+                    actividad = actividad,
+                    indiceElementoSeleccionado = estado.indiceElementoSeleccionado,
+                    pares = estado.pares,
+                    verificada = estado.verificada,
+                    onSeleccionarElemento = onSeleccionarElementoAsociar,
+                    onSeleccionarOpcion = onSeleccionarOpcionAsociar,
                 )
                 else -> TarjetaContenido(
                     actividad = actividad,
@@ -419,6 +433,20 @@ private fun TarjetaCompletar(
             ),
             modifier = Modifier.fillMaxWidth(),
         )
+        if (actividad.opciones.isNotEmpty()) {
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = "Banco de palabras",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(actividad.opciones) { opcion ->
+                    Chip(texto = opcion, habilitada = !verificada, onClick = { onCambiarTexto(opcion) })
+                }
+            }
+        }
     }
 }
 
@@ -466,6 +494,48 @@ private fun TarjetaOrdenar(
 }
 
 @Composable
+private fun TarjetaAsociar(
+    actividad: Actividad,
+    indiceElementoSeleccionado: Int?,
+    pares: Map<Int, Int>,
+    verificada: Boolean,
+    onSeleccionarElemento: (Int) -> Unit,
+    onSeleccionarOpcion: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxSize()) {
+        Text(
+            text = actividad.enunciado,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                actividad.elementos.forEachIndexed { indice, elemento ->
+                    OpcionTarjeta(
+                        texto = elemento,
+                        seleccionada = pares.containsKey(indice) || indiceElementoSeleccionado == indice,
+                        habilitada = !verificada,
+                        onClick = { onSeleccionarElemento(indice) },
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                actividad.opciones.forEachIndexed { indice, opcion ->
+                    OpcionTarjeta(
+                        texto = opcion,
+                        seleccionada = pares.containsValue(indice),
+                        habilitada = !verificada,
+                        onClick = { onSeleccionarOpcion(indice) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun Chip(
     texto: String,
     habilitada: Boolean,
@@ -492,10 +562,12 @@ private fun PanelRetroalimentacion(
     modifier: Modifier = Modifier,
 ) {
     val color = if (esCorrecta) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-    val respuestaCorrecta = if (actividad.respuestasCorrectas.isNotEmpty()) {
-        actividad.respuestasCorrectas.joinToString(" ")
-    } else {
-        actividad.respuestaCorrecta
+    val respuestaCorrecta = when {
+        actividad.tipo == "ASOCIAR" -> actividad.elementos
+            .zip(actividad.respuestasCorrectas)
+            .joinToString("; ") { (elemento, traduccion) -> "$elemento = $traduccion" }
+        actividad.respuestasCorrectas.isNotEmpty() -> actividad.respuestasCorrectas.joinToString(" ")
+        else -> actividad.respuestaCorrecta
     }
 
     Surface(
@@ -545,6 +617,7 @@ private fun BotonInferior(
             "SELECCION" -> estado.respuestaSeleccionada != null
             "COMPLETAR" -> estado.textoIngresado.isNotBlank()
             "ORDENAR" -> estado.ordenActual.isNotEmpty()
+            "ASOCIAR" -> actividad.elementos.isNotEmpty() && estado.pares.size == actividad.elementos.size
             else -> false
         }
         Button(

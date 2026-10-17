@@ -30,6 +30,7 @@ object ActividadesPruebaNivel {
             tipo = "COMPLETAR",
             orden = 3,
             enunciado = "Completa: '_____, imaynallan kashanki?' (Hola, ¿cómo estás?)",
+            opciones = listOf("Napaykullayki", "Rimaykullayki", "Añay"),
             respuestaCorrecta = "Napaykullayki",
         ),
         Actividad(
@@ -39,6 +40,15 @@ object ActividadesPruebaNivel {
             enunciado = "Ordena las palabras para formar: 'Yo aprendo quechua'",
             elementos = listOf("Ñuqa", "qichwata", "yachakuni"),
             respuestasCorrectas = listOf("Ñuqa", "qichwata", "yachakuni"),
+        ),
+        Actividad(
+            id = "5",
+            tipo = "ASOCIAR",
+            orden = 5,
+            enunciado = "Empareja cada palabra en quechua con su traducción",
+            elementos = listOf("Yaku", "Inti", "Killa"),
+            opciones = listOf("Luna", "Agua", "Sol"),
+            respuestasCorrectas = listOf("Agua", "Sol", "Luna"),
         ),
     )
 }

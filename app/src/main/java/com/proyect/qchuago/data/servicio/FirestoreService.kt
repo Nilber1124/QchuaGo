@@ -1,5 +1,6 @@
 package com.proyect.qchuago.data.servicio
 
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.proyect.qchuago.data.entidad.Usuario
@@ -77,4 +78,35 @@ class FirestoreService {
         Result.failure(e)
     }
 
+    /**
+     * Registra si una respuesta de actividad evaluable fue correcta o incorrecta,
+     * bajo usuarios/{uid}/respuestas. Un documento por actividad (se sobrescribe
+     * si el usuario repite el ejercicio). Pensado como telemetría secundaria: los
+     * llamadores deben tratarla como fire-and-forget y no deben bloquear ni
+     * mostrar error al usuario si falla.
+     */
+    suspend fun registrarRespuesta(
+        uid: String,
+        unidadId: String,
+        leccionId: String,
+        actividadId: String,
+        esCorrecta: Boolean,
+    ): Result<Unit> = try {
+        val idRespuesta = "${unidadId}_${leccionId}_$actividadId"
+        val datos = mapOf(
+            "unidadId" to unidadId,
+            "leccionId" to leccionId,
+            "actividadId" to actividadId,
+            "esCorrecta" to esCorrecta,
+            "fecha" to Timestamp.now(),
+        )
+        esperar(
+            usuariosCollection.document(uid)
+                .collection("respuestas").document(idRespuesta)
+                .set(datos)
+        )
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
 }

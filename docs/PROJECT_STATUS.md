@@ -1,6 +1,6 @@
 # Estado del proyecto QchuaGo
 
-Última actualización: 16 de octubre de 2026.
+Última actualización: 17 de octubre de 2026.
 
 ## Arquitectura y tecnología
 
@@ -49,6 +49,35 @@
   - El desbloqueo es secuencial: una unidad requiere completar todas las anteriores y una lección requiere completar las que la preceden.
   - Las lecciones se identifican para el progreso mediante la clave `unidadId/leccionId`, evitando colisiones entre documentos de distintas unidades con el mismo ID.
   - No existe acceso al contenido educativo porque RF05 todavía no está implementado.
+- RF08 - Ejercicios interactivos y registro de respuestas:
+  - Nuevo tipo de actividad `ASOCIAR` (asociación de palabras): reutiliza los campos
+    existentes de `Actividad` sin agregar ninguno nuevo. `elementos` son las palabras en
+    quechua (columna izquierda, en el orden a mostrar); `opciones` son las traducciones
+    en español ya mezcladas (columna derecha); `respuestasCorrectas[i]` es la traducción
+    correcta de `elementos[i]` (no necesariamente en el mismo orden que aparece en
+    `opciones`). Interacción tap-based en `TarjetaAsociar` (sin drag-and-drop ni
+    librerías nuevas): tocar un elemento izquierdo lo selecciona, tocar una opción
+    derecha completa el par, tocar un par ya formado lo deshace. El modelo mantiene el
+    espejo 1:1 con el admin web (`QchuaGo-Admin/src/types.ts` y `ActividadesPage.tsx`),
+    que ya permite crear actividades de este tipo.
+  - `LeccionViewModel.TIPOS_EVALUABLES` ahora incluye `ASOCIAR` junto a
+    SELECCION/COMPLETAR/ORDENAR.
+  - Registro de respuestas del usuario: `FirestoreService.registrarRespuesta` escribe en
+    `usuarios/{uid}/respuestas/{unidadId_leccionId_actividadId}` si una respuesta de
+    cualquier tipo evaluable fue correcta o incorrecta. Se dispara desde
+    `LeccionViewModel.comprobar()` de forma fire-and-forget (no bloquea la lección ni
+    muestra error si falla) y solo cuando la lección proviene de Firestore
+    (`actividadesEstaticas == null`) y existe un `uid` válido. El modo "Test de nivel"
+    (`Rutas.PRUEBA_NIVEL`, datos estáticos en memoria) nunca escribe nada.
+  - `AppNavigation` pasa `authViewModel.usuario?.uid` a `LeccionScreen` solo en la ruta
+    real `Rutas.LECCION`; `LeccionViewModel` no depende de `AuthViewModel`/`AuthService`,
+    solo recibe el `uid` como `String?` simple.
+  - `TarjetaCompletar` ahora muestra, cuando `actividad.opciones` no está vacío, un
+    "Banco de palabras" (chips reutilizando el composable `Chip` ya usado por
+    `ORDENAR`) debajo del campo de texto; tocar una palabra la escribe completa en el
+    campo (reutiliza `onCambiarTexto`, sin cambios en `LeccionViewModel`). Si una
+    actividad `COMPLETAR` no tiene `opciones`, el campo sigue siendo texto libre como
+    antes (compatible con contenido existente).
 
 ## Flujo actual de RF06
 
@@ -70,3 +99,4 @@ No existe pantalla de selección de nivel ni de selección de unidades.
 - `gradlew.bat assembleDebug`: compilación correcta el 15 de octubre de 2026.
 - `./gradlew assembleDebug`: compilación correcta el 16 de octubre de 2026 tras el rediseño del onboarding (bienvenida + elección de nivel).
 - `./gradlew assembleDebug`: compilación correcta el 16 de octubre de 2026 tras eliminar la pantalla "Selecciona tu nivel" de RF06 (auto-selección del primer nivel).
+- `./gradlew assembleDebug`: compilación correcta el 17 de octubre de 2026 tras agregar el tipo `ASOCIAR` y el registro de respuestas (RF08).

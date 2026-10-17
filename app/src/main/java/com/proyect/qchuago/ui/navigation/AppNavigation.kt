@@ -140,6 +140,7 @@ fun AppNavigation(
             LeccionScreen(
                 unidadId = unidadId,
                 leccionId = leccionId,
+                uid = usuario?.uid,
                 onSalir = { navController.popBackStack() },
             )
         }

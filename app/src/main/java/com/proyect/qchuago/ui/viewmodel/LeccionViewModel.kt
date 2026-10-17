@@ -5,12 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.proyect.qchuago.data.entidad.Actividad
 import com.proyect.qchuago.data.servicio.AudioService
 import com.proyect.qchuago.data.servicio.CursoService
+import com.proyect.qchuago.data.servicio.FirestoreService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-private val TIPOS_EVALUABLES = setOf("SELECCION", "COMPLETAR", "ORDENAR")
+private val TIPOS_EVALUABLES = setOf("SELECCION", "COMPLETAR", "ORDENAR", "ASOCIAR")
 
 sealed class EstadoLeccion {
     object Cargando : EstadoLeccion()
@@ -24,6 +25,8 @@ sealed class EstadoLeccion {
         val textoIngresado: String = "",
         val elementosDisponibles: List<String> = emptyList(),
         val ordenActual: List<String> = emptyList(),
+        val indiceElementoSeleccionado: Int? = null,
+        val pares: Map<Int, Int> = emptyMap(),
         val verificada: Boolean = false,
         val esCorrecta: Boolean? = null,
         val reproduciendoAudio: Boolean = false,
@@ -42,6 +45,8 @@ class LeccionViewModel(
     private val audioService: AudioService,
     private val cursoService: CursoService = CursoService(),
     private val actividadesEstaticas: List<Actividad>? = null,
+    private val uid: String? = null,
+    private val firestoreService: FirestoreService = FirestoreService(),
 ) : ViewModel() {
 
     private val _estadoLeccion = MutableStateFlow<EstadoLeccion>(EstadoLeccion.Cargando)
@@ -116,6 +121,39 @@ class LeccionViewModel(
         )
     }
 
+    fun seleccionarElementoAsociar(indiceElemento: Int) {
+        val estado = enCursoActual() ?: return
+        if (estado.verificada) return
+        if (estado.pares.containsKey(indiceElemento)) {
+            _estadoLeccion.value = estado.copy(
+                pares = estado.pares - indiceElemento,
+                indiceElementoSeleccionado = null,
+            )
+            return
+        }
+        _estadoLeccion.value = estado.copy(indiceElementoSeleccionado = indiceElemento)
+    }
+
+    fun seleccionarOpcionAsociar(indiceOpcion: Int) {
+        val estado = enCursoActual() ?: return
+        if (estado.verificada) return
+
+        val parExistente = estado.pares.entries.find { it.value == indiceOpcion }
+        if (parExistente != null) {
+            _estadoLeccion.value = estado.copy(
+                pares = estado.pares - parExistente.key,
+                indiceElementoSeleccionado = null,
+            )
+            return
+        }
+
+        val indiceElemento = estado.indiceElementoSeleccionado ?: return
+        _estadoLeccion.value = estado.copy(
+            pares = estado.pares + (indiceElemento to indiceOpcion),
+            indiceElementoSeleccionado = null,
+        )
+    }
+
     fun comprobar() {
         val estado = enCursoActual() ?: return
         if (estado.verificada) return
@@ -126,6 +164,9 @@ class LeccionViewModel(
             "COMPLETAR" -> estado.textoIngresado.trim()
                 .equals(actividad.respuestaCorrecta.trim(), ignoreCase = true)
             "ORDENAR" -> estado.ordenActual == actividad.respuestasCorrectas
+            "ASOCIAR" -> actividad.elementos.indices.map { i ->
+                estado.pares[i]?.let { actividad.opciones.getOrNull(it) }
+            } == actividad.respuestasCorrectas
             else -> return
         }
 
@@ -134,6 +175,24 @@ class LeccionViewModel(
             esCorrecta = esCorrecta,
             correctas = if (esCorrecta) estado.correctas + 1 else estado.correctas,
         )
+
+        registrarRespuestaSiCorresponde(actividad, esCorrecta)
+    }
+
+    private fun registrarRespuestaSiCorresponde(actividad: Actividad, esCorrecta: Boolean) {
+        if (actividadesEstaticas != null) return
+        val uidActual = uid ?: return
+        viewModelScope.launch {
+            runCatching {
+                firestoreService.registrarRespuesta(
+                    uid = uidActual,
+                    unidadId = unidadId,
+                    leccionId = leccionId,
+                    actividadId = actividad.id,
+                    esCorrecta = esCorrecta,
+                )
+            }
+        }
     }
 
     fun continuar() {
@@ -149,6 +208,8 @@ class LeccionViewModel(
             textoIngresado = "",
             elementosDisponibles = estado.actividades[siguienteIndice].elementos,
             ordenActual = emptyList(),
+            indiceElementoSeleccionado = null,
+            pares = emptyMap(),
             verificada = false,
             esCorrecta = null,
             grabacionDisponible = false,

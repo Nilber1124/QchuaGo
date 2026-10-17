@@ -6,7 +6,10 @@ import com.google.firebase.firestore.DocumentId
 /**
  * Paso dentro de una lección. El campo [tipo] decide qué subconjunto de campos
  * se usa: "VOCABULARIO"/"PRONUNCIACION" usan quechua/traduccion/explicacion/audio;
- * "SELECCION"/"COMPLETAR"/"ORDENAR" usan enunciado y las respuestas.
+ * "SELECCION"/"COMPLETAR"/"ORDENAR"/"ASOCIAR" usan enunciado y las respuestas.
+ * "ASOCIAR" empareja cada palabra de [elementos] (quechua) con su traducción
+ * correcta en [respuestasCorrectas] (mismo índice); [opciones] contiene las
+ * traducciones ya mezcladas para mostrar como columna derecha.
  */
 @Keep
 data class Actividad(
