@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.proyect.qchuago.data.entidad.Leccion
 import com.proyect.qchuago.data.entidad.Unidad
 import com.proyect.qchuago.ui.navigation.Rutas
 import com.proyect.qchuago.ui.theme.colorDesdeHex
@@ -82,35 +83,16 @@ fun ProgresoScreen(
                 }
             }
             is EstadoCurso.Exito -> {
-                val totalLecciones = remember(estado.unidades) {
-                    estado.unidades.sumOf { it.lecciones.size }
-                }
-                val leccionesCompletadas = remember(estado.unidades, leccionesCompletadasIds) {
-                    estado.unidades.sumOf { unidad ->
-                        unidad.lecciones.count {
-                            cursoViewModel.estaCompletada(unidad, it, leccionesCompletadasIds)
-                        }
-                    }
-                }
-                val unidadesCompletadas = remember(estado.unidades, leccionesCompletadasIds) {
-                    estado.unidades.count { unidad ->
-                        unidad.lecciones.isNotEmpty() && unidad.lecciones.all {
-                            cursoViewModel.estaCompletada(unidad, it, leccionesCompletadasIds)
-                        }
-                    }
-                }
-                val siguienteLeccion = remember(estado.unidades, leccionesCompletadasIds) {
-                    estado.unidades
-                        .flatMap { unidad -> unidad.lecciones.map { unidad to it } }
-                        .firstOrNull { (unidad, leccion) ->
-                            !cursoViewModel.estaCompletada(unidad, leccion, leccionesCompletadasIds)
-                        }
+                // Obtenemos todas las métricas de avance en una sola línea clara
+                val resumen = remember(estado.unidades, leccionesCompletadasIds) {
+                    cursoViewModel.calcularResumenProgreso(estado.unidades, leccionesCompletadasIds)
                 }
 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                 ) {
+                    // 1. Título y subtítulo de la pantalla
                     item(key = "titulo") {
                         Text(
                             text = "Tu progreso",
@@ -124,24 +106,28 @@ fun ProgresoScreen(
                         )
                         Spacer(Modifier.height(16.dp))
                     }
+
+                    // 2. Tarjeta con barra y estadísticas generales
                     item(key = "resumen") {
                         TarjetaResumenProgreso(
-                            leccionesCompletadas = leccionesCompletadas,
-                            totalLecciones = totalLecciones,
-                            unidadesCompletadas = unidadesCompletadas,
+                            resumen = resumen,
                             totalUnidades = estado.unidades.size,
                         )
                         Spacer(Modifier.height(16.dp))
                     }
+
+                    // 3. Tarjeta destacada para continuar con la siguiente lección
                     item(key = "continuar") {
                         TarjetaContinuar(
-                            siguiente = siguienteLeccion,
+                            siguiente = resumen.siguienteLeccion,
                             onContinuar = { (unidad, leccion) ->
                                 navController.navigate("${Rutas.LECCION}/${unidad.id}/${leccion.id}")
                             },
                         )
                         Spacer(Modifier.height(20.dp))
                     }
+
+                    // 4. Lista de unidades del curso con su barra individual
                     item(key = "titulo_unidades") {
                         Text(
                             text = "Unidades",
@@ -167,17 +153,15 @@ fun ProgresoScreen(
     }
 }
 
+/**
+ * Tarjeta superior que muestra el porcentaje general y contadores de lecciones y unidades.
+ */
 @Composable
 private fun TarjetaResumenProgreso(
-    leccionesCompletadas: Int,
-    totalLecciones: Int,
-    unidadesCompletadas: Int,
+    resumen: com.proyect.qchuago.ui.viewmodel.ResumenProgresoCurso,
     totalUnidades: Int,
     modifier: Modifier = Modifier,
 ) {
-    val progreso = if (totalLecciones > 0) leccionesCompletadas.toFloat() / totalLecciones else 0f
-    val porcentaje = (progreso * 100).toInt()
-
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(16.dp),
@@ -197,7 +181,7 @@ private fun TarjetaResumenProgreso(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "$porcentaje%",
+                    text = "${resumen.porcentaje}%",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -205,19 +189,19 @@ private fun TarjetaResumenProgreso(
             }
             Spacer(Modifier.height(10.dp))
             LinearProgressIndicator(
-                progress = { progreso },
+                progress = { resumen.progresoFraccion },
                 modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(50)),
                 strokeCap = StrokeCap.Round,
             )
             Spacer(Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 EstadisticaProgreso(
-                    valor = "$leccionesCompletadas/$totalLecciones",
+                    valor = "${resumen.leccionesCompletadas}/${resumen.totalLecciones}",
                     etiqueta = "Lecciones",
                     modifier = Modifier.weight(1f),
                 )
                 EstadisticaProgreso(
-                    valor = "$unidadesCompletadas/$totalUnidades",
+                    valor = "${resumen.unidadesCompletadas}/$totalUnidades",
                     etiqueta = "Unidades",
                     modifier = Modifier.weight(1f),
                 )
@@ -240,8 +224,8 @@ private fun EstadisticaProgreso(valor: String, etiqueta: String, modifier: Modif
 
 @Composable
 private fun TarjetaContinuar(
-    siguiente: Pair<Unidad, com.proyect.qchuago.data.entidad.Leccion>?,
-    onContinuar: (Pair<Unidad, com.proyect.qchuago.data.entidad.Leccion>) -> Unit,
+    siguiente: Pair<Unidad, Leccion>?,
+    onContinuar: (Pair<Unidad, Leccion>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(

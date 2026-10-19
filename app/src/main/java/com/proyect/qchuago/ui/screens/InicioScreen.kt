@@ -79,8 +79,18 @@ fun InicioScreen(
     val estadoCurso by cursoViewModel.estadoCurso.collectAsState()
     val leccionesCompletadasIds = usuario?.leccionesCompletadasIds ?: emptyList()
 
+    // Calculamos el resumen cuando el curso está listo, para unificar el progreso en toda la app
+    val estadoExito = estadoCurso as? EstadoCurso.Exito
+    val resumen = remember(leccionesCompletadasIds, estadoExito) {
+        estadoExito?.let { cursoViewModel.calcularResumenProgreso(it.unidades, leccionesCompletadasIds) }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
-        BarraSuperiorAprendizaje(usuario = usuario)
+        BarraSuperiorAprendizaje(
+            usuario = usuario,
+            leccionesCompletadas = resumen?.leccionesCompletadas ?: (usuario?.leccionesCompletadas ?: 0),
+            totalLecciones = resumen?.totalLecciones ?: (usuario?.totalLecciones ?: 1),
+        )
 
         AnimatedContent(
             targetState = estadoCurso,
@@ -123,17 +133,7 @@ fun InicioScreen(
                     }
                 }
                 is EstadoCurso.Exito -> {
-                    val siguienteLeccion = remember(leccionesCompletadasIds, estado.unidades) {
-                        estado.unidades
-                            .flatMap { unidad -> unidad.lecciones.map { unidad to it } }
-                            .firstOrNull { (unidad, leccion) ->
-                                !cursoViewModel.estaCompletada(
-                                    unidad,
-                                    leccion,
-                                    leccionesCompletadasIds,
-                                )
-                            }
-                    }
+                    val siguienteLeccion = resumen?.siguienteLeccion
                     LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
                         item(key = "encabezado_curso") {
                             Column(
@@ -194,10 +194,12 @@ fun InicioScreen(
 @Composable
 private fun BarraSuperiorAprendizaje(
     usuario: Usuario?,
+    leccionesCompletadas: Int = usuario?.leccionesCompletadas ?: 0,
+    totalLecciones: Int = usuario?.totalLecciones ?: 1,
     modifier: Modifier = Modifier,
 ) {
-    val progreso = if ((usuario?.totalLecciones ?: 0) > 0)
-        (usuario?.leccionesCompletadas ?: 0).toFloat() / (usuario?.totalLecciones ?: 1).toFloat()
+    val progreso = if (totalLecciones > 0)
+        leccionesCompletadas.toFloat() / totalLecciones.toFloat()
     else 0f
 
     val progresoAnimado by animateFloatAsState(
@@ -381,6 +383,11 @@ private fun BurbujaLeccion(
         label = "pulse_val_${leccion.id}",
     )
 
+    // Desplazamiento horizontal para crear el camino en zig-zag (estilo Duolingo):
+    // 0 -> Centro (0 dp)
+    // 1 -> Izquierda (-64 dp)
+    // 2 -> Centro (0 dp)
+    // 3 -> Derecha (+64 dp)
     val offsetX = when (index % 4) {
         1 -> (-64).dp
         3 -> 64.dp

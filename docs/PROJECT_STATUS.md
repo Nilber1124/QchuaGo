@@ -1,6 +1,6 @@
 # Estado del proyecto QchuaGo
 
-Última actualización: 17 de octubre de 2026.
+Última actualización: 18 de octubre de 2026.
 
 ## Arquitectura y tecnología
 
@@ -14,50 +14,39 @@
 - Las tarjetas de ejercicio de `LeccionScreen.kt` viven en el subpaquete
   `ui/screens/leccion/` (una por tipo), con `LeccionScreen.kt` como orquestador.
 - `LeccionScreen.kt` usa `.systemBarsPadding()` en su contenedor raíz (17 de octubre
-  de 2026) — antes el encabezado (✕ + barra de progreso) se dibujaba debajo de la
-  barra de estado del celular (hora/batería) porque `MainActivity` usa
-  `enableEdgeToEdge()` y esta pantalla no tenía ningún padding de sistema, a
-  diferencia de `LoginScreen`/`RegisterScreen`/`BienvenidaScreen`/`ElegirNivelScreen`
-  que ya lo tenían. Las pantallas dentro de `HomeScreen` (Inicio/Progreso/Perfil/etc.)
-  no lo necesitan porque ya reciben el inset correcto a través del `Scaffold`.
+  de 2026).
 - No existe el concepto de "niveles" de dificultad (Básico/Intermedio/Avanzado): se
   eliminó por completo el 17 de octubre de 2026 (ver sección RF06 más abajo). El
   curso es únicamente `unidades` → `lecciones` → `actividades`.
 
-## Auditoría de código (17 de octubre de 2026)
+## Simplificación y legibilidad de código (18 de octubre de 2026)
+
+Revisión orientada a claridad pedagógica para principiantes sin alterar apariencia ni funcionalidad:
+
+- **Unificación de progreso en `CursoViewModel`:** Se introdujo `ResumenProgresoCurso` y
+  el método `cursoViewModel.calcularResumenProgreso(...)`. Esto eliminó ~30 líneas de
+  cálculos repetidos con transformaciones de listas anidadas en `ProgresoScreen`,
+  `PerfilScreen` e `InicioScreen`.
+- **`InicioScreen.BarraSuperiorAprendizaje` sincronizada:** Ahora refleja el progreso
+  real de lecciones completadas frente al total dinámico del curso (resolviendo el
+  pendiente que tenía del valor fijo).
+- **Componente base `TarjetaPerfil` en `PerfilScreen`:** Centraliza el contenedor
+  redondeado con borde para evitar repetir 5 veces los mismos modificadores visuales en
+  tarjetas de estadísticas, preferencias y botones.
+- **Comentarios didácticos:** Se documentaron conceptos clave como la lógica del camino
+  en zig-zag de `BurbujaLeccion`, la organización de `ProgresoScreen` y las reglas de
+  desbloqueo secuencial.
+
+## Auditoría previa de código (17 de octubre de 2026)
 
 Revisión de legibilidad/mantenibilidad sin cambiar arquitectura ni funcionalidad.
 Cambios aplicados:
 
 - **`Actividad.tipo` pasó de `String` a `enum class TipoActividad`** (mismo archivo,
-  `data/entidad/Actividad.kt`). Firestore deserializa el enum por nombre de forma
-  nativa — los documentos existentes ("VOCABULARIO", "SELECCION", etc.) no necesitan
-  migración. Todos los `when (actividad.tipo)` relevantes (`LeccionViewModel.comprobar()`,
-  `LeccionScreen`/`BotonInferior`) quedaron exhaustivos (sin `else` de escape), así que
-  el compilador avisará si en el futuro se agrega un tipo nuevo y falta manejarlo en
-  algún sitio — antes era un string libre repetido 24 veces en 4 archivos sin ninguna
-  verificación en tiempo de compilación.
-- **Parseo de color unificado**: `colorDesdeHex(hex, fallback)` en `ui/theme/Color.kt`,
-  usado por `InicioScreen` y `ProgresoScreen` (antes cada uno tenía su propia copia del
-  mismo try/catch, con fallbacks distintos).
-- **`PerfilScreen` muestra el progreso real del curso**, igual que `ProgresoScreen`
-  (ambos comparten el mismo `CursoViewModel` dentro de `HomeScreen`), en vez del
-  `usuario.totalLecciones` fijo (quedaba en 9 por defecto, nunca se recalculaba). Antes
-  Perfil y Progreso podían mostrar porcentajes distintos para lo mismo.
-- **`LeccionScreen.kt` (674 líneas) se dividió** en `ui/screens/leccion/`: una tarjeta
-  de ejercicio por archivo (`TarjetaSeleccion.kt`, `TarjetaCompletar.kt`,
-  `TarjetaOrdenar.kt`, `TarjetaAsociar.kt`, `TarjetaContenido.kt`), más
-  `ComponentesEjercicio.kt` (chips/barra de progreso compartidos),
-  `PanelRetroalimentacion.kt`, `BotonInferior.kt` y `ResultadoLeccion.kt`.
-  `LeccionScreen.kt` quedó en 262 líneas como orquestador. Sin cambios de lógica ni de
-  UI, solo reorganización.
-- **Pendiente de verificar en un dispositivo/emulador real** (no disponible en este
-  entorno): que una lección real cargada desde Firestore siga deserializando `tipo`
-  correctamente con el enum nuevo. `./gradlew assembleDebug` compila sin errores, que
-  es la verificación que sí se pudo hacer aquí.
-- **No se tocó** (quedó fuera del alcance aprobado): `InicioScreen.BarraSuperiorAprendizaje`
-  tiene el mismo problema que tenía `PerfilScreen` (usa `usuario.totalLecciones` fijo
-  para su barra de XP) — queda anotado para una futura vuelta si se quiere.
+  `data/entidad/Actividad.kt`).
+- **Parseo de color unificado**: `colorDesdeHex(hex, fallback)` en `ui/theme/Color.kt`.
+- **`PerfilScreen` muestra el progreso real del curso**, igual que `ProgresoScreen`.
+- **`LeccionScreen.kt` (674 líneas) se dividió** en `ui/screens/leccion/`.
 
 ## Funcionalidades presentes
 

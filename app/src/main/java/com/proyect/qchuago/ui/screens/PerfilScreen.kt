@@ -45,17 +45,20 @@ fun PerfilScreen(
 
     val leccionesCompletadasIds = usuario?.leccionesCompletadasIds ?: emptyList()
     val estadoExito = estadoCurso as? EstadoCurso.Exito
-    val totalLeccionesReal = estadoExito?.unidades?.sumOf { it.lecciones.size } ?: 0
-    val leccionesCompletadasReal = estadoExito?.unidades?.sumOf { unidad ->
-        unidad.lecciones.count { cursoViewModel.estaCompletada(unidad, it, leccionesCompletadasIds) }
-    } ?: 0
+    val resumen = remember(estadoExito, leccionesCompletadasIds) {
+        if (estadoExito != null) {
+            cursoViewModel.calcularResumenProgreso(estadoExito.unidades, leccionesCompletadasIds)
+        } else {
+            com.proyect.qchuago.ui.viewmodel.ResumenProgresoCurso()
+        }
+    }
 
     PerfilScreen(
         usuario = usuario,
         error = error,
         temaOscuro = temaOscuro,
-        leccionesCompletadas = leccionesCompletadasReal,
-        totalLecciones = totalLeccionesReal,
+        leccionesCompletadas = resumen.leccionesCompletadas,
+        totalLecciones = resumen.totalLecciones,
         onCambiarTema = authViewModel::cambiarTema,
         onActualizarNombre = authViewModel::actualizarNombre,
         onCambiarContrasena = authViewModel::cambiarContrasena,
@@ -345,44 +348,62 @@ private fun EstadisticasPerfil(usuario: Usuario, leccionesCompletadas: Int, tota
     }
 }
 
+/**
+ * Contenedor base reutilizable para las tarjetas del perfil.
+ * Centraliza la forma redondeada y el borde para que el código sea limpio y fácil de mantener.
+ */
+@Composable
+private fun TarjetaPerfil(
+    modifier: Modifier = Modifier,
+    colorFondo: Color = MaterialTheme.colorScheme.surface,
+    onClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        color = colorFondo,
+        shape = RoundedCornerShape(16.dp),
+        modifier = modifier
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(16.dp),
+            )
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+    ) {
+        content()
+    }
+}
+
 @Composable
 private fun TarjetaEstadistica(
     icono: Int,
     valor: String,
     etiqueta: String,
     colorValor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(16.dp),
-        modifier = modifier.border(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(16.dp)
-        )
-    ) {
+    TarjetaPerfil(modifier = modifier) {
         Column(
             modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
         ) {
             Image(
                 painter = painterResource(icono),
                 contentDescription = etiqueta,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(24.dp),
             )
             Spacer(Modifier.height(8.dp))
             Text(
                 text = valor,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = colorValor
+                color = colorValor,
             )
             Spacer(Modifier.height(2.dp))
             Text(
                 text = etiqueta,
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -393,36 +414,26 @@ private fun TarjetaProgreso(
     leccionesCompletadas: Int,
     totalLecciones: Int,
     progreso: Float,
-    porcentaje: Int
+    porcentaje: Int,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(16.dp)
-            )
-    ) {
+    TarjetaPerfil(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = "Progreso Total",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = "$porcentaje%",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
 
@@ -436,7 +447,7 @@ private fun TarjetaProgreso(
                     .clip(RoundedCornerShape(6.dp)),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                strokeCap = StrokeCap.Round
+                strokeCap = StrokeCap.Round,
             )
 
             Spacer(Modifier.height(8.dp))
@@ -444,7 +455,7 @@ private fun TarjetaProgreso(
             Text(
                 text = "$leccionesCompletadas de $totalLecciones lecciones completadas",
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -453,31 +464,21 @@ private fun TarjetaProgreso(
 @Composable
 private fun PreferenciasPerfil(
     temaOscuro: Boolean,
-    onCambiarTema: (Boolean) -> Unit
+    onCambiarTema: (Boolean) -> Unit,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(16.dp)
-            )
-    ) {
+    TarjetaPerfil(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(
                     painter = painterResource(R.drawable.ic_perfil_tema),
                     contentDescription = "Tema de la app",
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(24.dp),
                 )
                 Spacer(Modifier.width(12.dp))
                 Column {
@@ -485,12 +486,12 @@ private fun PreferenciasPerfil(
                         text = "Tema de la app",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
                         text = if (temaOscuro) "Modo Oscuro" else "Modo Claro",
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -502,8 +503,8 @@ private fun PreferenciasPerfil(
                     checkedTrackColor = MaterialTheme.colorScheme.primary,
                     uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    uncheckedBorderColor = Color.Transparent
-                )
+                    uncheckedBorderColor = Color.Transparent,
+                ),
             )
         }
     }
@@ -512,53 +513,38 @@ private fun PreferenciasPerfil(
 @Composable
 private fun OpcionPerfil(
     texto: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(16.dp)
-            )
-            .clickable(onClick = onClick)
+    TarjetaPerfil(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
     ) {
         Text(
             text = texto,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
         )
     }
 }
 
 @Composable
 private fun BotonCerrarSesion(onCerrarSesion: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(16.dp)
-            )
-            .clickable(onClick = onCerrarSesion)
+    TarjetaPerfil(
+        colorFondo = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onCerrarSesion,
     ) {
         Box(
             modifier = Modifier.padding(vertical = 16.dp),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = "Cerrar Sesión",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }
