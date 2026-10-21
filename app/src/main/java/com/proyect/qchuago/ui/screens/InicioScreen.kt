@@ -85,6 +85,7 @@ fun InicioScreen(
         estadoExito?.let { cursoViewModel.calcularResumenProgreso(it.unidades, leccionesCompletadasIds) }
     }
 
+
     Column(modifier = modifier.fillMaxSize()) {
         BarraSuperiorAprendizaje(
             usuario = usuario,

@@ -263,4 +263,22 @@ class LeccionViewModel(
         super.onCleared()
         audioService.liberar()
     }
+    fun anterior() {
+        val estado = enCursoActual() ?: return
+        if (estado.indice > 0) {
+            val anteriorIndice = estado.indice - 1
+            _estadoLeccion.value = estado.copy(
+                indice = anteriorIndice,
+                respuestaSeleccionada = null,
+                textoIngresado = "",
+                elementosDisponibles = estado.actividades[anteriorIndice].elementos,
+                ordenActual = emptyList(),
+                indiceElementoSeleccionado = null,
+                pares = emptyMap(),
+                verificada = false,
+                esCorrecta = null,
+                grabacionDisponible = false,
+            )
+        }
+    }
 }
