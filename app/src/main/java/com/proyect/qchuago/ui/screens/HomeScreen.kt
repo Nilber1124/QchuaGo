@@ -20,24 +20,27 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.proyect.qchuago.R
+import com.proyect.qchuago.data.entidad.Leccion
+import com.proyect.qchuago.data.entidad.Unidad
 import com.proyect.qchuago.ui.navigation.Rutas
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
+import com.proyect.qchuago.ui.viewmodel.CursoViewModel
 
 enum class NavTab(
     val title: String,
@@ -58,6 +61,11 @@ fun HomeScreen(
 ) {
     val usuario by authViewModel.usuario.collectAsState()
     var selectedTab by rememberSaveable { mutableStateOf(NavTab.INICIO) }
+    // Instancia única compartida por las 3 pestañas, para no repetir la carga del curso.
+    val cursoViewModel: CursoViewModel = viewModel()
+    val abrirLeccion: (Unidad, Leccion) -> Unit = { unidad, leccion ->
+        navController.navigate(Rutas.leccion(unidad.id, leccion.id))
+    }
 
     LaunchedEffect(usuario) {
         if (usuario == null) {
@@ -82,11 +90,22 @@ fun HomeScreen(
                 .padding(innerPadding)
         ) {
             when (selectedTab) {
-                NavTab.INICIO -> InicioScreen(authViewModel = authViewModel, navController = navController)
-                NavTab.PROGRESO -> ProgresoScreen(authViewModel = authViewModel, navController = navController)
+                NavTab.INICIO -> InicioScreen(
+                    authViewModel = authViewModel,
+                    cursoViewModel = cursoViewModel,
+                    onAbrirLeccion = abrirLeccion,
+                )
+                NavTab.PROGRESO -> ProgresoScreen(
+                    authViewModel = authViewModel,
+                    cursoViewModel = cursoViewModel,
+                    onAbrirLeccion = abrirLeccion,
+                )
                 NavTab.DICCIONARIO -> DiccionarioScreen()
                 NavTab.REPASO -> RepasoScreen()
-                NavTab.PERFIL -> PerfilScreen(authViewModel = authViewModel)
+                NavTab.PERFIL -> PerfilScreen(
+                    authViewModel = authViewModel,
+                    cursoViewModel = cursoViewModel,
+                )
             }
         }
     }

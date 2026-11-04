@@ -21,12 +21,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -36,16 +36,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import com.proyect.qchuago.R
 import com.proyect.qchuago.data.entidad.Usuario
-import com.proyect.qchuago.ui.navigation.Rutas
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 
 @Composable
 fun LoginScreen(
-    navController: NavController,
     authViewModel: AuthViewModel,
+    onAutenticado: (Usuario) -> Unit,
+    onIrARegistro: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val cargando by authViewModel.cargando.collectAsState()
@@ -53,22 +52,24 @@ fun LoginScreen(
     val usuario by authViewModel.usuario.collectAsState()
 
     LoginScreen(
-        navController = navController,
         cargando = cargando,
         error = error,
         usuario = usuario,
         onIniciarSesion = authViewModel::iniciarSesion,
+        onAutenticado = onAutenticado,
+        onIrARegistro = onIrARegistro,
         modifier = modifier,
     )
 }
 
 @Composable
 fun LoginScreen(
-    navController: NavController,
     cargando: Boolean,
     error: String?,
     usuario: Usuario?,
     onIniciarSesion: (correo: String, contrasena: String) -> Unit,
+    onAutenticado: (Usuario) -> Unit,
+    onIrARegistro: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var correo by rememberSaveable { mutableStateOf("") }
@@ -76,12 +77,9 @@ fun LoginScreen(
     var mensajeError by remember { mutableStateOf<String?>(null) }
     val errorVisible = mensajeError ?: error
 
+    // Cuando el login/registro termina bien, el ViewModel llena `usuario` y avisamos hacia arriba.
     LaunchedEffect(usuario) {
-        usuario?.let {
-            navController.navigate(Rutas.destinoTrasAutenticar(it)) {
-                popUpTo(navController.graph.id) { inclusive = true }
-            }
-        }
+        usuario?.let(onAutenticado)
     }
 
     Column(
@@ -168,7 +166,7 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("¿No tienes cuenta?", style = MaterialTheme.typography.bodyMedium)
-            TextButton(onClick = { navController.navigate(Rutas.REGISTRO) }) {
+            TextButton(onClick = onIrARegistro) {
                 Text("Registrarse")
             }
         }

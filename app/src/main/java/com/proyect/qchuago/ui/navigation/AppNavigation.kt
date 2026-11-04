@@ -10,9 +10,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -45,6 +45,12 @@ object Rutas {
     const val HOME = "home"
     const val LECCION = "leccion"
 
+    /** Patrón que registra el NavHost (los {} son los argumentos). */
+    const val LECCION_PATRON = "$LECCION/{unidadId}/{leccionId}"
+
+    /** Ruta concreta para abrir una lección: `navController.navigate(Rutas.leccion(u, l))`. */
+    fun leccion(unidadId: String, leccionId: String): String = "$LECCION/$unidadId/$leccionId"
+
     /** Decide a dónde navegar tras autenticar: bienvenida la primera vez, Home después. */
     fun destinoTrasAutenticar(usuario: Usuario): String =
         if (usuario.onboardingCompletado) HOME else BIENVENIDA
@@ -59,13 +65,17 @@ fun AppNavigation(
     val sesionInicializada by authViewModel.sesionInicializada.collectAsState()
     val usuario by authViewModel.usuario.collectAsState()
 
+    /** Va a [ruta] borrando todo el historial (el botón "atrás" no vuelve). */
+    fun irSinVolver(ruta: String) {
+        navController.navigate(ruta) {
+            popUpTo(navController.graph.id) { inclusive = true }
+        }
+    }
+
     // Cuando se comprueba la sesión al arrancar, salta a Login, Bienvenida o Home.
     LaunchedEffect(sesionInicializada) {
         if (sesionInicializada) {
-            val destino = usuario?.let { Rutas.destinoTrasAutenticar(it) } ?: Rutas.LOGIN
-            navController.navigate(destino) {
-                popUpTo(navController.graph.id) { inclusive = true }
-            }
+            irSinVolver(usuario?.let { Rutas.destinoTrasAutenticar(it) } ?: Rutas.LOGIN)
         }
     }
 
@@ -77,14 +87,16 @@ fun AppNavigation(
         composable(Rutas.SPLASH) { PantallaCargaInicial() }
         composable(Rutas.LOGIN) {
             LoginScreen(
-                navController = navController,
                 authViewModel = authViewModel,
+                onAutenticado = { irSinVolver(Rutas.destinoTrasAutenticar(it)) },
+                onIrARegistro = { navController.navigate(Rutas.REGISTRO) },
             )
         }
         composable(Rutas.REGISTRO) {
             RegisterScreen(
-                navController = navController,
                 authViewModel = authViewModel,
+                onAutenticado = { irSinVolver(Rutas.destinoTrasAutenticar(it)) },
+                onVolver = { navController.popBackStack() },
             )
         }
         composable(Rutas.BIENVENIDA) {
@@ -101,10 +113,8 @@ fun AppNavigation(
         composable(Rutas.ELEGIR_NIVEL) {
             ElegirNivelScreen(
                 onPrincipiante = {
-                    authViewModel.actualizarUsuario({ it.copy(onboardingCompletado = true) })
-                    navController.navigate(Rutas.HOME) {
-                        popUpTo(navController.graph.id) { inclusive = true }
-                    }
+                    authViewModel.completarOnboarding()
+                    irSinVolver(Rutas.HOME)
                 },
                 onTestNivel = { navController.navigate(Rutas.PRUEBA_NIVEL) },
             )
@@ -115,10 +125,8 @@ fun AppNavigation(
                 leccionId = "demo",
                 actividadesEstaticas = ActividadesPruebaNivel.lista,
                 onSalir = { _ ->
-                    authViewModel.actualizarUsuario({ it.copy(onboardingCompletado = true) })
-                    navController.navigate(Rutas.HOME) {
-                        popUpTo(navController.graph.id) { inclusive = true }
-                    }
+                    authViewModel.completarOnboarding()
+                    irSinVolver(Rutas.HOME)
                 },
             )
         }
@@ -129,7 +137,7 @@ fun AppNavigation(
             )
         }
         composable(
-            route = "${Rutas.LECCION}/{unidadId}/{leccionId}",
+            route = Rutas.LECCION_PATRON,
             arguments = listOf(
                 navArgument("unidadId") { type = NavType.StringType },
                 navArgument("leccionId") { type = NavType.StringType },
@@ -142,15 +150,7 @@ fun AppNavigation(
                 leccionId = leccionId,
                 uid = usuario?.uid,
                 onSalir = { completada ->
-                    val clave = "$unidadId/$leccionId"
-                    if (completada && usuario?.leccionesCompletadasIds?.contains(clave) != true) {
-                        authViewModel.actualizarUsuario { u ->
-                            u.copy(
-                                leccionesCompletadasIds = u.leccionesCompletadasIds + clave,
-                                leccionesCompletadas = u.leccionesCompletadasIds.size + 1,
-                            )
-                        }
-                    }
+                    if (completada) authViewModel.marcarLeccionCompletada(unidadId, leccionId)
                     navController.popBackStack()
                 },
             )

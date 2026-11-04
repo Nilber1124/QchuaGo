@@ -19,15 +19,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,24 +35,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
 import com.proyect.qchuago.data.entidad.Leccion
 import com.proyect.qchuago.data.entidad.Unidad
-import com.proyect.qchuago.ui.navigation.Rutas
 import com.proyect.qchuago.ui.theme.colorDesdeHex
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 import com.proyect.qchuago.ui.viewmodel.CursoViewModel
-import com.proyect.qchuago.ui.viewmodel.EstadoCurso
 
 /**
- * Comparte el [CursoViewModel] de Inicio (misma pantalla Home, mismo
- * ViewModelStoreOwner) para no recargar el curso ni duplicar la lógica de
+ * Recibe el mismo [CursoViewModel] creado una sola vez en `HomeScreen` y compartido
+ * con Inicio y Perfil, para no recargar el curso ni duplicar la lógica de
  * bloqueo/completado de RF07.
  */
 @Composable
 fun ProgresoScreen(
     authViewModel: AuthViewModel,
-    navController: NavController,
+    onAbrirLeccion: (Unidad, Leccion) -> Unit,
     cursoViewModel: CursoViewModel = viewModel(),
     modifier: Modifier = Modifier,
 ) {
@@ -62,92 +57,69 @@ fun ProgresoScreen(
     val estadoCurso by cursoViewModel.estadoCurso.collectAsState()
     val leccionesCompletadasIds = usuario?.leccionesCompletadasIds ?: emptyList()
 
-    Box(modifier = modifier.fillMaxSize()) {
-        when (val estado = estadoCurso) {
-            is EstadoCurso.Cargando -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+    val resumen = cursoViewModel.resumen(leccionesCompletadasIds)
+
+    ContenidoRecurso(
+        recurso = estadoCurso,
+        onReintentar = cursoViewModel::reintentar,
+        modifier = modifier,
+    ) { unidades ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+        ) {
+            // 1. Título y subtítulo de la pantalla
+            item(key = "titulo") {
+                Text(
+                    text = "Tu progreso",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Unidades y lecciones completadas",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(16.dp))
             }
-            is EstadoCurso.Error -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-                        Text(
-                            text = estado.mensaje,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Button(onClick = { cursoViewModel.reintentar() }) { Text("Reintentar") }
-                    }
-                }
+
+            // 2. Tarjeta con barra y estadísticas generales
+            item(key = "resumen") {
+                TarjetaResumenProgreso(
+                    resumen = resumen,
+                    totalUnidades = unidades.size,
+                )
+                Spacer(Modifier.height(16.dp))
             }
-            is EstadoCurso.Exito -> {
-                // Obtenemos todas las métricas de avance en una sola línea clara
-                val resumen = remember(estado.unidades, leccionesCompletadasIds) {
-                    cursoViewModel.calcularResumenProgreso(estado.unidades, leccionesCompletadasIds)
+
+            // 3. Tarjeta destacada para continuar con la siguiente lección
+            item(key = "continuar") {
+                TarjetaContinuar(
+                    siguiente = resumen.siguienteLeccion,
+                    onContinuar = { (unidad, leccion) -> onAbrirLeccion(unidad, leccion) },
+                )
+                Spacer(Modifier.height(20.dp))
+            }
+
+            // 4. Lista de unidades del curso con su barra individual
+            item(key = "titulo_unidades") {
+                Text(
+                    text = "Unidades",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(10.dp))
+            }
+            items(unidades, key = { it.id }) { unidad ->
+                val completadasUnidad = unidad.lecciones.count {
+                    cursoViewModel.estaCompletada(unidad, it, leccionesCompletadasIds)
                 }
-
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                ) {
-                    // 1. Título y subtítulo de la pantalla
-                    item(key = "titulo") {
-                        Text(
-                            text = "Tu progreso",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = "Unidades y lecciones completadas",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(16.dp))
-                    }
-
-                    // 2. Tarjeta con barra y estadísticas generales
-                    item(key = "resumen") {
-                        TarjetaResumenProgreso(
-                            resumen = resumen,
-                            totalUnidades = estado.unidades.size,
-                        )
-                        Spacer(Modifier.height(16.dp))
-                    }
-
-                    // 3. Tarjeta destacada para continuar con la siguiente lección
-                    item(key = "continuar") {
-                        TarjetaContinuar(
-                            siguiente = resumen.siguienteLeccion,
-                            onContinuar = { (unidad, leccion) ->
-                                navController.navigate("${Rutas.LECCION}/${unidad.id}/${leccion.id}")
-                            },
-                        )
-                        Spacer(Modifier.height(20.dp))
-                    }
-
-                    // 4. Lista de unidades del curso con su barra individual
-                    item(key = "titulo_unidades") {
-                        Text(
-                            text = "Unidades",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                    }
-                    items(estado.unidades, key = { it.id }) { unidad ->
-                        val completadasUnidad = unidad.lecciones.count {
-                            cursoViewModel.estaCompletada(unidad, it, leccionesCompletadasIds)
-                        }
-                        FilaUnidadProgreso(
-                            unidad = unidad,
-                            completadas = completadasUnidad,
-                            total = unidad.lecciones.size,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                    }
-                }
+                FilaUnidadProgreso(
+                    unidad = unidad,
+                    completadas = completadasUnidad,
+                    total = unidad.lecciones.size,
+                )
+                Spacer(Modifier.height(10.dp))
             }
         }
     }

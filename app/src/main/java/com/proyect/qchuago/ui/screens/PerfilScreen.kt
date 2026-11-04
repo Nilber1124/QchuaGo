@@ -30,7 +30,6 @@ import com.proyect.qchuago.R
 import com.proyect.qchuago.data.entidad.Usuario
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 import com.proyect.qchuago.ui.viewmodel.CursoViewModel
-import com.proyect.qchuago.ui.viewmodel.EstadoCurso
 
 @Composable
 fun PerfilScreen(
@@ -41,17 +40,9 @@ fun PerfilScreen(
     val usuario by authViewModel.usuario.collectAsState()
     val error by authViewModel.error.collectAsState()
     val temaOscuro by authViewModel.temaOscuro.collectAsState()
+    // Se observa el curso para que el resumen se recalcule cuando termine de cargar.
     val estadoCurso by cursoViewModel.estadoCurso.collectAsState()
-
-    val leccionesCompletadasIds = usuario?.leccionesCompletadasIds ?: emptyList()
-    val estadoExito = estadoCurso as? EstadoCurso.Exito
-    val resumen = remember(estadoExito, leccionesCompletadasIds) {
-        if (estadoExito != null) {
-            cursoViewModel.calcularResumenProgreso(estadoExito.unidades, leccionesCompletadasIds)
-        } else {
-            com.proyect.qchuago.ui.viewmodel.ResumenProgresoCurso()
-        }
-    }
+    val resumen = cursoViewModel.resumen(usuario?.leccionesCompletadasIds.orEmpty())
 
     PerfilScreen(
         usuario = usuario,

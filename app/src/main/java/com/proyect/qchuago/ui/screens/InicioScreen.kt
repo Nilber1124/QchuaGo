@@ -32,19 +32,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -57,21 +55,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
 import com.proyect.qchuago.data.entidad.Leccion
 import com.proyect.qchuago.data.entidad.Unidad
 import com.proyect.qchuago.data.entidad.Usuario
-import com.proyect.qchuago.ui.navigation.Rutas
 import com.proyect.qchuago.ui.theme.colorDesdeHex
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 import com.proyect.qchuago.ui.viewmodel.CursoViewModel
-import com.proyect.qchuago.ui.viewmodel.EstadoCurso
 import kotlinx.coroutines.delay
 
 @Composable
 fun InicioScreen(
     authViewModel: AuthViewModel,
-    navController: NavController,
+    onAbrirLeccion: (Unidad, Leccion) -> Unit,
     cursoViewModel: CursoViewModel = viewModel(),
     modifier: Modifier = Modifier,
 ) {
@@ -79,18 +74,14 @@ fun InicioScreen(
     val estadoCurso by cursoViewModel.estadoCurso.collectAsState()
     val leccionesCompletadasIds = usuario?.leccionesCompletadasIds ?: emptyList()
 
-    // Calculamos el resumen cuando el curso está listo, para unificar el progreso en toda la app
-    val estadoExito = estadoCurso as? EstadoCurso.Exito
-    val resumen = remember(leccionesCompletadasIds, estadoExito) {
-        estadoExito?.let { cursoViewModel.calcularResumenProgreso(it.unidades, leccionesCompletadasIds) }
-    }
-
+    // Mismo resumen de progreso que usan Progreso y Perfil (vacío mientras carga).
+    val resumen = cursoViewModel.resumen(leccionesCompletadasIds)
 
     Column(modifier = modifier.fillMaxSize()) {
         BarraSuperiorAprendizaje(
             usuario = usuario,
-            leccionesCompletadas = resumen?.leccionesCompletadas ?: (usuario?.leccionesCompletadas ?: 0),
-            totalLecciones = resumen?.totalLecciones ?: (usuario?.totalLecciones ?: 1),
+            leccionesCompletadas = resumen.leccionesCompletadas,
+            totalLecciones = resumen.totalLecciones,
         )
 
         AnimatedContent(
@@ -99,91 +90,60 @@ fun InicioScreen(
             label = "estado_curso",
             modifier = Modifier.fillMaxSize(),
         ) { estado ->
-            when (estado) {
-                is EstadoCurso.Cargando -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
-                            Spacer(Modifier.height(12.dp))
+            ContenidoRecurso(
+                recurso = estado,
+                onReintentar = cursoViewModel::reintentar,
+                textoCargando = "Cargando curso...",
+            ) { unidades ->
+                val siguienteLeccion = resumen.siguienteLeccion
+                LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
+                    item(key = "encabezado_curso") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                        ) {
                             Text(
-                                text = "Cargando curso...",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = "Tu aprendizaje",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                text = "Todas las unidades y lecciones",
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
-                }
-                is EstadoCurso.Error -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(32.dp),
-                        ) {
-                            Text("⚠️", fontSize = 48.sp)
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                text = estado.mensaje,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            Button(onClick = { cursoViewModel.reintentar() }) {
-                                Text("Reintentar")
-                            }
+                    unidades.forEach { unidad ->
+                        val unidadDesbloqueada = cursoViewModel.estaDesbloqueadaUnidad(
+                            unidad, leccionesCompletadasIds
+                        )
+                        item(key = "banner_${unidad.id}") {
+                            BannerUnidad(unidad = unidad, desbloqueada = unidadDesbloqueada)
                         }
-                    }
-                }
-                is EstadoCurso.Exito -> {
-                    val siguienteLeccion = resumen?.siguienteLeccion
-                    LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
-                        item(key = "encabezado_curso") {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                            ) {
-                                Text(
-                                    text = "Tu aprendizaje",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                                Text(
-                                    text = "Todas las unidades y lecciones",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        estado.unidades.forEach { unidad ->
-                            val unidadDesbloqueada = cursoViewModel.estaDesbloqueadaUnidad(
-                                unidad, leccionesCompletadasIds
+                        itemsIndexed(
+                            items = unidad.lecciones,
+                            key = { _, lec -> "lec_${unidad.id}_${lec.id}" },
+                        ) { index, leccion ->
+                            val desbloqueada = cursoViewModel.estaDesbloqueada(
+                                unidad, leccion, leccionesCompletadasIds
                             )
-                            item(key = "banner_${unidad.id}") {
-                                BannerUnidad(unidad = unidad, desbloqueada = unidadDesbloqueada)
-                            }
-                            itemsIndexed(
-                                items = unidad.lecciones,
-                                key = { _, lec -> "lec_${unidad.id}_${lec.id}" },
-                            ) { index, leccion ->
-                                val desbloqueada = cursoViewModel.estaDesbloqueada(
-                                    unidad, leccion, leccionesCompletadasIds
-                                )
-                                BurbujaLeccion(
-                                    leccion = leccion,
-                                    index = index,
-                                    desbloqueada = desbloqueada,
-                                    esSiguiente = siguienteLeccion?.let { (siguienteUnidad, siguiente) ->
-                                        siguienteUnidad.id == unidad.id && siguiente.id == leccion.id
-                                    } == true,
-                                    colorUnidad = colorDesdeHex(unidad.colorHex),
-                                    onClick = {
-                                        navController.navigate("${Rutas.LECCION}/${unidad.id}/${leccion.id}")
-                                    },
-                                )
-                            }
-                            item(key = "spacer_${unidad.id}") {
-                                Spacer(Modifier.height(20.dp))
-                            }
+                            BurbujaLeccion(
+                                leccion = leccion,
+                                index = index,
+                                desbloqueada = desbloqueada,
+                                esSiguiente = siguienteLeccion?.let { (siguienteUnidad, siguiente) ->
+                                    siguienteUnidad.id == unidad.id && siguiente.id == leccion.id
+                                } == true,
+                                colorUnidad = colorDesdeHex(unidad.colorHex),
+                                onClick = {
+                                    onAbrirLeccion(unidad, leccion)
+                                },
+                            )
+                        }
+                        item(key = "spacer_${unidad.id}") {
+                            Spacer(Modifier.height(20.dp))
                         }
                     }
                 }
