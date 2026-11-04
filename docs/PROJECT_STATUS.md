@@ -1,12 +1,14 @@
 # Estado del proyecto QchuaGo
 
-Última actualización: 18 de octubre de 2026.
+Última actualización: 4 de noviembre de 2026.
 
 ## Arquitectura y tecnología
 
 - Aplicación Android en Kotlin con Jetpack Compose y Material 3.
 - Navegación principal centralizada en `AppNavigation.kt` y pestañas dentro de `HomeScreen.kt`.
-- MVVM básico: servicios de Firebase, ViewModels y pantallas Compose.
+- MVVM de 2 capas: ViewModels y pantallas Compose. **Ya no existe `data/servicio/`**
+  (ver sección "Eliminación de la capa Service" más abajo): el ViewModel llama
+  directamente a Firebase.
 - Firebase Authentication para identidad y Cloud Firestore para perfiles y contenido del curso.
 - Compatibilidad mínima: Android 10 (API 29).
 - `Actividad.tipo` es un `enum class TipoActividad` (no `String`) desde la auditoría del
@@ -18,6 +20,82 @@
 - No existe el concepto de "niveles" de dificultad (Básico/Intermedio/Avanzado): se
   eliminó por completo el 17 de octubre de 2026 (ver sección RF06 más abajo). El
   curso es únicamente `unidades` → `lecciones` → `actividades`.
+
+## Eliminación de la capa Service (26 de octubre de 2026)
+
+Cambio de arquitectura solicitado explícitamente: se eliminó por completo
+`data/servicio/` para que el flujo quede en solo 2 capas, `ViewModel <-> Composable`,
+sin intermediario.
+
+- **`AuthService.kt` y `FirestoreService.kt` → `AuthViewModel.kt`:** el ViewModel
+  ahora tiene sus propias instancias de `FirebaseAuth`/`FirebaseFirestore` y hace las
+  llamadas directamente (login, registro, actualizar nombre/contraseña, obtener o
+  crear el perfil en Firestore). Mismo `Result<T>`, mismos mensajes de error en
+  español y misma lógica de reversión optimista de `actualizarUsuario`.
+- **`CursoService.kt` (unidades) → `CursoViewModel.kt`:** `cargarCurso()` consulta
+  Firestore directamente.
+- **`CursoService.kt` (actividades) y `FirestoreService.registrarRespuesta` →
+  `LeccionViewModel.kt`:** `cargarActividades()` y el registro de respuestas
+  (fire-and-forget) se ejecutan directamente desde el ViewModel.
+- **`AudioService.kt` → `LeccionViewModel.kt`:** la reproducción/grabación con
+  `MediaPlayer`/`MediaRecorder` pasó a ser lógica privada del ViewModel; ahora recibe
+  un `Context` en el constructor en vez de un `AudioService` ya construido.
+- **`FirebaseExt.kt`** se reubicó a `ui/viewmodel/` y luego se **eliminó** el 4 de
+  noviembre de 2026 (ver sección siguiente): ahora se usa `.await()` oficial.
+- `LeccionScreen.kt` ya no construye un `AudioService`; su `ViewModelProvider.Factory`
+  manual se reemplazó por el DSL `viewModelFactory { initializer { ... } }` de
+  `androidx.lifecycle.viewmodel` (ya era dependencia del proyecto).
+- `AGENTS.md` se actualizó para reflejar la nueva arquitectura (ya no menciona
+  `data/servicio/` ni la regla de "todo acceso a Firebase vía Servicios").
+- Verificado con `./gradlew assembleDebug` (compila sin errores).
+
+## Fases 1-3 del plan de mejoras (4 de noviembre de 2026)
+
+Ver `docs/PLAN_MEJORAS.md`. Sin cambios de funcionalidad:
+
+- **Componentes comunes:** nuevo `ui/screens/ComponentesComunes.kt` con
+  `PantallaCargando`, `PantallaError` (con `onVolver` opcional) y
+  `ContenidoRecurso(recurso, onReintentar) { datos -> ... }`. Reemplazan los bloques
+  copiados en `InicioScreen`, `ProgresoScreen` y `LeccionScreen` (se borraron
+  `CargandoLeccion`/`ErrorLeccion`). Pequeño cambio visual: el error de Progreso ahora
+  muestra el ⚠️ como el de Inicio.
+- **Navegación:** `Rutas.LECCION_PATRON` y `Rutas.leccion(unidadId, leccionId)`; ya no se
+  arma la ruta con strings en las pantallas. `InicioScreen`/`ProgresoScreen` reciben
+  `onAbrirLeccion: (Unidad, Leccion) -> Unit` (lo arma `HomeScreen`) y
+  `LoginScreen`/`RegisterScreen` reciben `onAutenticado`, `onIrARegistro`/`onVolver`
+  en vez de `navController`. `AppNavigation` tiene el helper local `irSinVolver(ruta)`.
+- **Lógica al ViewModel:** `AuthViewModel.marcarLeccionCompletada(unidadId, leccionId)`
+  y `AuthViewModel.completarOnboarding()` (antes estaban en `AppNavigation`).
+  `CursoViewModel.resumen(leccionesCompletadasIds)` reemplaza el
+  `as? Recurso.Exito` + `remember` repetido en Inicio, Progreso y Perfil
+  (`calcularResumenProgreso` ahora es privada). La barra superior de Inicio ya no usa
+  `Usuario.totalLecciones` como respaldo mientras carga (muestra 0).
+- Verificado con `./gradlew assembleDebug` (compila sin errores).
+
+## Simplificación de los métodos Firebase (4 de noviembre de 2026)
+
+Sin cambios visibles para el usuario ni en la estructura de Firestore:
+
+- Se reemplazó el helper propio `esperar(Task)` por el oficial `.await()`
+  (`kotlinx.coroutines.tasks.await`, ya incluido transitivamente por Firebase; no se
+  agregó ninguna dependencia). Se borró `ui/viewmodel/FirebaseExt.kt`.
+- `AuthViewModel` (~330 → ~230 líneas): un solo molde `try { ...await() } catch` por
+  función, sin `Result<T>` intermedio.
+  - `cargarPerfil()` reemplaza a `obtenerOCrearUsuario()` y a los 3 bloques copiados en
+    `init`, `iniciarSesion` y el `recargarPerfil()` (este último no se usaba y se quitó).
+    Solo escribe en Firestore la primera vez (antes hacía `set(merge)` en cada login).
+  - Una sola `actualizarUsuario(onCompletado = {}, transformar)`; se usa con lambda final:
+    `actualizarUsuario { it.copy(...) }`. Su mensaje de error ya no muestra texto técnico.
+  - Una sola `registrar(nombre, correo, contrasena)` (`RegisterScreen` se adaptó). Ya no
+    llama a `updateProfile` de Auth: el nombre vive en Firestore.
+  - `actualizarNombre()` reutiliza `actualizarUsuario` (antes duplicaba la lógica y
+    actualizaba también el `displayName` de Auth).
+  - Se quitó el `AuthStateListener`: el cierre de sesión ya lo maneja `cerrarSesion()`.
+- `CursoViewModel.cargarCurso()`: las unidades se ordenan con `orderBy("orden")` en
+  Firestore (igual que las lecciones) en vez de `sortedBy` en Kotlin.
+- `LeccionViewModel`: `registrarRespuestaSiCorresponde()` llama `.set(datos)` sin
+  corrutina ni `await` (Firestore encola la escritura sola).
+- Verificado con `./gradlew assembleDebug` (compila sin errores).
 
 ## Simplificación y legibilidad de código (18 de octubre de 2026)
 
