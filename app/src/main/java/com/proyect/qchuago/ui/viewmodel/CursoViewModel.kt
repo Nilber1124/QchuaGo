@@ -2,19 +2,15 @@ package com.proyect.qchuago.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.proyect.qchuago.data.entidad.Leccion
 import com.proyect.qchuago.data.entidad.Unidad
-import com.proyect.qchuago.data.servicio.CursoService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-
-sealed class EstadoCurso {
-    object Cargando : EstadoCurso()
-    data class Exito(val unidades: List<Unidad>) : EstadoCurso()
-    data class Error(val mensaje: String) : EstadoCurso()
-}
+import kotlinx.coroutines.tasks.await
 
 /**
  * Modelo simple que agrupa los cálculos de avance del curso para que
@@ -35,12 +31,13 @@ data class ResumenProgresoCurso(
         get() = if (totalLecciones > 0) leccionesCompletadas.toFloat() / totalLecciones else 0f
 }
 
-class CursoViewModel(
-    private val cursoService: CursoService = CursoService(),
-) : ViewModel() {
+class CursoViewModel : ViewModel() {
 
-    private val _estadoCurso = MutableStateFlow<EstadoCurso>(EstadoCurso.Cargando)
-    val estadoCurso: StateFlow<EstadoCurso> = _estadoCurso.asStateFlow()
+    private val firestore = FirebaseFirestore.getInstance()
+    private val unidadesCollection = firestore.collection("unidades")
+
+    private val _estadoCurso = MutableStateFlow<Recurso<List<Unidad>>>(Recurso.Cargando)
+    val estadoCurso: StateFlow<Recurso<List<Unidad>>> = _estadoCurso.asStateFlow()
 
     init {
         cargarCurso()
@@ -50,25 +47,47 @@ class CursoViewModel(
      * Carga todas las unidades del curso desde Firestore.
      */
     fun cargarCurso() {
-        _estadoCurso.value = EstadoCurso.Cargando
+        _estadoCurso.value = Recurso.Cargando
         viewModelScope.launch {
-            cursoService.obtenerUnidades()
-                .onSuccess { _estadoCurso.value = EstadoCurso.Exito(it) }
-                .onFailure {
-                    _estadoCurso.value = EstadoCurso.Error(
-                        "No se pudieron cargar las unidades. Inténtalo nuevamente."
-                    )
+            try {
+                // 1) Todas las unidades, ordenadas por "orden".
+                val documentosUnidades = unidadesCollection
+                    .orderBy("orden", Query.Direction.ASCENDING)
+                    .get().await()
+                    .documents
+
+                // 2) Para cada unidad, su subcolección "lecciones" (también ordenada).
+                val unidades = documentosUnidades.map { documento ->
+                    val unidad = documento.toObject(Unidad::class.java) ?: Unidad(id = documento.id)
+                    val lecciones = documento.reference.collection("lecciones")
+                        .orderBy("orden", Query.Direction.ASCENDING)
+                        .get().await()
+                        .toObjects(Leccion::class.java)
+                    unidad.copy(lecciones = lecciones)
                 }
+                _estadoCurso.value = Recurso.Exito(unidades)
+            } catch (e: Exception) {
+                _estadoCurso.value = Recurso.Error(
+                    "No se pudieron cargar las unidades. Inténtalo nuevamente."
+                )
+            }
         }
     }
 
     fun reintentar() = cargarCurso()
 
     /**
-     * Calcula métricas agregadas del curso en una sola llamada.
-     * Facilita el entendimiento del código para principiantes y evita duplicar código en las pantallas.
+     * Resumen del avance del usuario en el curso (porcentaje, completadas, siguiente lección).
+     * Si el curso todavía no cargó, devuelve un resumen vacío (todo en 0).
+     *
+     * Uso en una pantalla: `val resumen = cursoViewModel.resumen(usuario?.leccionesCompletadasIds.orEmpty())`
      */
-    fun calcularResumenProgreso(
+    fun resumen(leccionesCompletadasIds: List<String>): ResumenProgresoCurso {
+        val unidades = (_estadoCurso.value as? Recurso.Exito)?.datos ?: return ResumenProgresoCurso()
+        return calcularResumenProgreso(unidades, leccionesCompletadasIds)
+    }
+
+    private fun calcularResumenProgreso(
         unidades: List<Unidad>,
         leccionesCompletadasIds: List<String>,
     ): ResumenProgresoCurso {
@@ -109,12 +128,12 @@ class CursoViewModel(
         leccion: Leccion,
         leccionesCompletadasIds: List<String>,
     ): Boolean {
-        val estado = _estadoCurso.value as? EstadoCurso.Exito ?: return false
-        val unidadActual = estado.unidades.firstOrNull { it.id == unidad.id } ?: return false
+        val estado = _estadoCurso.value as? Recurso.Exito<List<Unidad>> ?: return false
+        val unidadActual = estado.datos.firstOrNull { it.id == unidad.id } ?: return false
         val indice = unidadActual.lecciones.indexOfFirst { it.id == leccion.id }
         if (indice == -1) return false
 
-        val unidadesPrevias = estado.unidades.takeWhile { it.id != unidadActual.id }
+        val unidadesPrevias = estado.datos.takeWhile { it.id != unidadActual.id }
         val leccionesPrevias = unidadActual.lecciones.take(indice)
 
         val unidadesPreviasListas = unidadesPrevias.all { anterior ->
@@ -131,8 +150,8 @@ class CursoViewModel(
      * Una unidad está desbloqueada si todas las lecciones de las unidades anteriores están completas.
      */
     fun estaDesbloqueadaUnidad(unidad: Unidad, leccionesCompletadasIds: List<String>): Boolean {
-        val estado = _estadoCurso.value as? EstadoCurso.Exito ?: return false
-        val unidadesPrevias = estado.unidades.takeWhile { it.id != unidad.id }
+        val estado = _estadoCurso.value as? Recurso.Exito<List<Unidad>> ?: return false
+        val unidadesPrevias = estado.datos.takeWhile { it.id != unidad.id }
         return unidadesPrevias.all { anterior ->
             anterior.lecciones.all { estaCompletada(anterior, it, leccionesCompletadasIds) }
         }

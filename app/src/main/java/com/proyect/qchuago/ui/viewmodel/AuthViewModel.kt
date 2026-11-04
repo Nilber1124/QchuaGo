@@ -2,20 +2,28 @@ package com.proyect.qchuago.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.proyect.qchuago.data.entidad.Usuario
-import com.proyect.qchuago.data.servicio.AuthService
-import com.proyect.qchuago.data.servicio.FirestoreService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
-class AuthViewModel(
-    private val authService: AuthService = AuthService(),
-    private val firestoreService: FirestoreService = FirestoreService(),
-) : ViewModel() {
+/**
+ * Maneja la sesión y el perfil del usuario.
+ *
+ * Todas las funciones que hablan con Firebase siguen el mismo molde:
+ * `cargando = true → try { ... .await() } catch { mensaje en español } → cargando = false`.
+ */
+class AuthViewModel : ViewModel() {
 
-    private val cancelarEscuchaAuth: () -> Unit
+    private val auth = FirebaseAuth.getInstance()
+    private val usuariosCollection = FirebaseFirestore.getInstance().collection("usuarios")
 
     /** `true` cuando ya se comprobó si existía una sesión guardada. */
     private val _sesionInicializada = MutableStateFlow(false)
@@ -38,44 +46,23 @@ class AuthViewModel(
     val error: StateFlow<String?> = _error.asStateFlow()
 
     init {
-        cancelarEscuchaAuth = authService.escucharEstadoSesion { autenticado ->
-            if (!autenticado && _sesionInicializada.value) {
-                _usuario.value = null
-                _temaOscuro.value = false
-            }
-        }
-
-        val usuarioAuth = authService.usuarioActual
-        if (usuarioAuth != null) {
-            viewModelScope.launch {
-                firestoreService.obtenerOCrearUsuario(usuarioAuth)
-                    .onSuccess { u ->
-                        _temaOscuro.value = u.temaOscuro
-                        _usuario.value = u
-                    }
-                    .onFailure {
-                        _error.value = "No se pudo cargar tu perfil. Inténtalo nuevamente."
-                        _usuario.value = usuarioAuth
-                    }
-                _sesionInicializada.value = true
-            }
-        } else {
+        // Si ya había una sesión guardada, cargamos su perfil antes de mostrar la app.
+        val usuarioAuth = auth.currentUser
+        viewModelScope.launch {
+            if (usuarioAuth != null) cargarPerfil(aUsuario(usuarioAuth))
             _sesionInicializada.value = true
         }
     }
 
     /**
-     * Actualiza el usuario tanto localmente (optimistic UI) como en Firestore.
-     * Si ocurre un error, revierte los cambios automáticamente.
-     * Permite modificar cualquier campo actual o futuro (vidas, xp, racha, tema, etc.) con una sola llamada.
+     * Cambia cualquier campo del usuario (xp, vidas, tema, etc.) con una sola llamada.
+     * Primero actualiza la pantalla y luego guarda en Firestore; si falla, deshace el cambio.
+     *
+     * Ejemplo: `actualizarUsuario { it.copy(xp = it.xp + 10) }`
      */
-    fun actualizarUsuario(transformar: (Usuario) -> Usuario) {
-        actualizarUsuario(transformar, null)
-    }
-
     fun actualizarUsuario(
+        onCompletado: (exito: Boolean) -> Unit = {},
         transformar: (Usuario) -> Usuario,
-        onCompletado: ((Boolean) -> Unit)?
     ) {
         val previo = _usuario.value ?: return
         val nuevo = transformar(previo)
@@ -83,17 +70,15 @@ class AuthViewModel(
         _temaOscuro.value = nuevo.temaOscuro
 
         viewModelScope.launch {
-            firestoreService.actualizarUsuario(nuevo)
-                .onSuccess {
-                    onCompletado?.invoke(true)
-                }
-                .onFailure { e ->
-                    // Revertir cambios en caso de falla
-                    _usuario.value = previo
-                    _temaOscuro.value = previo.temaOscuro
-                    _error.value = "Error al guardar los cambios: ${e.message ?: "Inténtalo más tarde."}"
-                    onCompletado?.invoke(false)
-                }
+            try {
+                usuariosCollection.document(nuevo.uid).set(nuevo, SetOptions.merge()).await()
+                onCompletado(true)
+            } catch (e: Exception) {
+                _usuario.value = previo
+                _temaOscuro.value = previo.temaOscuro
+                _error.value = "No se pudieron guardar los cambios. Inténtalo más tarde."
+                onCompletado(false)
+            }
         }
     }
 
@@ -101,63 +86,54 @@ class AuthViewModel(
         actualizarUsuario { it.copy(temaOscuro = activo) }
     }
 
+    /** Marca que el usuario ya vio la bienvenida para no mostrársela otra vez. */
+    fun completarOnboarding() {
+        actualizarUsuario { it.copy(onboardingCompletado = true) }
+    }
+
+    /**
+     * Guarda que el usuario terminó una lección (RF14). Esto desbloquea la siguiente.
+     * La clave tiene el mismo formato que `Leccion.claveEn(unidadId)`: "unidadId/leccionId".
+     */
+    fun marcarLeccionCompletada(unidadId: String, leccionId: String) {
+        val clave = "$unidadId/$leccionId"
+        if (_usuario.value?.leccionesCompletadasIds?.contains(clave) == true) return
+        actualizarUsuario { u ->
+            val ids = u.leccionesCompletadasIds + clave
+            u.copy(leccionesCompletadasIds = ids, leccionesCompletadas = ids.size)
+        }
+    }
+
     fun iniciarSesion(correo: String, contrasena: String) {
         _cargando.value = true
         _error.value = null
         viewModelScope.launch {
-            authService.iniciarSesion(correo.trim(), contrasena)
-                .onSuccess { userAuth ->
-                    firestoreService.obtenerOCrearUsuario(userAuth)
-                        .onSuccess { u ->
-                            _temaOscuro.value = u.temaOscuro
-                            _usuario.value = u
-                        }
-                        .onFailure {
-                            _error.value = "No se pudo cargar tu perfil. Inténtalo nuevamente."
-                            _usuario.value = userAuth
-                        }
-                }
-                .onFailure { _error.value = it.message ?: "Ocurrió un error inesperado." }
-            _cargando.value = false
-        }
-    }
-
-    fun registrar(nuevoUsuario: Usuario, contrasena: String) {
-        _cargando.value = true
-        _error.value = null
-        viewModelScope.launch {
-            authService.registrar(nuevoUsuario, contrasena)
-                .onSuccess { usuarioConUid ->
-                    // Guardado directo y explícito del usuario en la colección usuarios/{uid}
-                    firestoreService.guardarNuevoUsuario(usuarioConUid)
-                        .onSuccess {
-                            _temaOscuro.value = usuarioConUid.temaOscuro
-                            _usuario.value = usuarioConUid
-                        }
-                        .onFailure { e ->
-                            _error.value = "La cuenta fue creada en Auth, pero ocurrió un error al guardar en Firestore: ${e.message}"
-                        }
-                }
-                .onFailure { _error.value = it.message ?: "Ocurrió un error inesperado." }
+            try {
+                val resultado = auth.signInWithEmailAndPassword(correo.trim(), contrasena).await()
+                val usuarioAuth = resultado.user ?: throw Exception("Sin usuario")
+                cargarPerfil(aUsuario(usuarioAuth))
+            } catch (e: Exception) {
+                _error.value = mensajeComprensible(e)
+            }
             _cargando.value = false
         }
     }
 
     fun registrar(nombre: String, correo: String, contrasena: String) {
-        registrar(Usuario(nombre = nombre.trim(), correo = correo.trim()), contrasena)
-    }
-
-    fun recargarPerfil() {
-        val usuarioActual = _usuario.value ?: return
+        _cargando.value = true
+        _error.value = null
         viewModelScope.launch {
-            firestoreService.obtenerOCrearUsuario(usuarioActual)
-                .onSuccess {
-                    _usuario.value = it
-                    _temaOscuro.value = it.temaOscuro
-                }
-                .onFailure {
-                    _error.value = "No se pudo actualizar tu perfil."
-                }
+            try {
+                val resultado = auth.createUserWithEmailAndPassword(correo.trim(), contrasena).await()
+                val usuarioAuth = resultado.user ?: throw Exception("Sin usuario")
+                val nuevo = Usuario(uid = usuarioAuth.uid, nombre = nombre.trim(), correo = correo.trim())
+                usuariosCollection.document(nuevo.uid).set(nuevo).await()
+                _usuario.value = nuevo
+                _temaOscuro.value = nuevo.temaOscuro
+            } catch (e: Exception) {
+                _error.value = mensajeComprensible(e)
+            }
+            _cargando.value = false
         }
     }
 
@@ -166,26 +142,9 @@ class AuthViewModel(
             _error.value = "El nombre no puede estar vacío."
             return
         }
-        val usuarioActual = _usuario.value ?: run {
-            _error.value = "No hay sesión activa."
-            return
-        }
-        val nombreLimpio = nuevoNombre.trim()
-        _cargando.value = true
         _error.value = null
-
-        viewModelScope.launch {
-            authService.actualizarNombre(nombreLimpio)
-                .onSuccess {
-                    firestoreService.actualizarUsuario(usuarioActual.copy(nombre = nombreLimpio))
-                        .onSuccess {
-                            _usuario.value = usuarioActual.copy(nombre = nombreLimpio)
-                            onSuccess()
-                        }
-                        .onFailure { _error.value = "Error al guardar en base de datos." }
-                }
-                .onFailure { _error.value = it.message ?: "Ocurrió un error inesperado." }
-            _cargando.value = false
+        actualizarUsuario(onCompletado = { exito -> if (exito) onSuccess() }) {
+            it.copy(nombre = nuevoNombre.trim())
         }
     }
 
@@ -205,19 +164,20 @@ class AuthViewModel(
 
         _cargando.value = true
         _error.value = null
-
         viewModelScope.launch {
-            authService.cambiarContrasena(nueva)
-                .onSuccess {
-                    onSuccess()
-                }
-                .onFailure { _error.value = it.message ?: "Ocurrió un error inesperado." }
+            try {
+                val user = auth.currentUser ?: throw Exception("Sin sesión")
+                user.updatePassword(nueva).await()
+                onSuccess()
+            } catch (e: Exception) {
+                _error.value = mensajeComprensible(e)
+            }
             _cargando.value = false
         }
     }
 
     fun cerrarSesion() {
-        authService.cerrarSesion()
+        auth.signOut()
         _usuario.value = null
         _temaOscuro.value = false
     }
@@ -226,8 +186,53 @@ class AuthViewModel(
         _error.value = null
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        cancelarEscuchaAuth()
+    /**
+     * Lee el perfil de `usuarios/{uid}`. Si es la primera vez (no existe), lo crea.
+     * Si falla la lectura, deja entrar al usuario con los datos básicos de Auth.
+     */
+    private suspend fun cargarPerfil(usuarioAuth: Usuario) {
+        try {
+            val documento = usuariosCollection.document(usuarioAuth.uid)
+            val guardado = documento.get().await().toObject(Usuario::class.java)
+            val usuario = if (guardado != null) {
+                guardado
+            } else {
+                documento.set(usuarioAuth).await()
+                usuarioAuth
+            }
+            _usuario.value = usuario
+            _temaOscuro.value = usuario.temaOscuro
+        } catch (e: Exception) {
+            _usuario.value = usuarioAuth
+            _error.value = "No se pudo cargar tu perfil. Inténtalo nuevamente."
+        }
+    }
+
+    /** Traduce el error técnico de Firebase a un mensaje comprensible. */
+    private fun mensajeComprensible(error: Exception): String {
+        if (error is FirebaseAuthException) {
+            return when (error.errorCode) {
+                "ERROR_INVALID_EMAIL" -> "El correo no es válido."
+                "ERROR_EMAIL_ALREADY_IN_USE" -> "El correo ya está registrado."
+                "ERROR_WEAK_PASSWORD" -> "La contraseña debe tener al menos 6 caracteres."
+                "ERROR_WRONG_PASSWORD",
+                "ERROR_INVALID_CREDENTIAL",
+                "ERROR_USER_NOT_FOUND" -> "El correo o la contraseña son incorrectos."
+                "ERROR_REQUIRES_RECENT_LOGIN" -> "Por seguridad, vuelve a iniciar sesión antes de cambiar tu contraseña."
+                "ERROR_NETWORK_REQUEST_FAILED" -> "No se pudo conectar con Firebase."
+                else -> "Ocurrió un error inesperado."
+            }
+        }
+        return "Ocurrió un error inesperado."
+    }
+
+    /** Convierte el usuario de Firebase Auth en nuestro [Usuario] con datos básicos. */
+    private fun aUsuario(usuario: FirebaseUser): Usuario {
+        val correo = usuario.email.orEmpty()
+        return Usuario(
+            uid = usuario.uid,
+            correo = correo,
+            nombre = usuario.displayName ?: correo.substringBefore("@").ifBlank { "Usuario" },
+        )
     }
 }

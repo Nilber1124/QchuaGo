@@ -1,16 +1,22 @@
 package com.proyect.qchuago.ui.viewmodel
 
+import android.content.Context
+import android.media.MediaPlayer
+import android.media.MediaRecorder
+import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.proyect.qchuago.data.entidad.Actividad
 import com.proyect.qchuago.data.entidad.TipoActividad
-import com.proyect.qchuago.data.servicio.AudioService
-import com.proyect.qchuago.data.servicio.CursoService
-import com.proyect.qchuago.data.servicio.FirestoreService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import java.io.File
 
 private val TIPOS_EVALUABLES = setOf(
     TipoActividad.SELECCION,
@@ -45,15 +51,27 @@ sealed class EstadoLeccion {
     data class Finalizada(val correctas: Int, val totalEvaluables: Int) : EstadoLeccion()
 }
 
+/**
+ * Coordina una lección: carga sus actividades desde Firestore (o usa actividades
+ * estáticas para la prueba de nivel), lleva el estado de cada ejercicio, y maneja
+ * la reproducción/grabación de audio de las actividades de tipo
+ * VOCABULARIO/PRONUNCIACION (práctica local, no evaluable, no sube nada a Firebase).
+ */
 class LeccionViewModel(
     private val unidadId: String,
     private val leccionId: String,
-    private val audioService: AudioService,
-    private val cursoService: CursoService = CursoService(),
+    private val context: Context,
     private val actividadesEstaticas: List<Actividad>? = null,
     private val uid: String? = null,
-    private val firestoreService: FirestoreService = FirestoreService(),
 ) : ViewModel() {
+
+    private val firestore = FirebaseFirestore.getInstance()
+    private val unidadesCollection = firestore.collection("unidades")
+    private val usuariosCollection = firestore.collection("usuarios")
+
+    private var mediaPlayer: MediaPlayer? = null
+    private var mediaRecorder: MediaRecorder? = null
+    private val archivoGrabacion = File(context.cacheDir, "practica_pronunciacion.3gp")
 
     private val _estadoLeccion = MutableStateFlow<EstadoLeccion>(EstadoLeccion.Cargando)
     val estadoLeccion: StateFlow<EstadoLeccion> = _estadoLeccion.asStateFlow()
@@ -70,13 +88,20 @@ class LeccionViewModel(
             return
         }
         viewModelScope.launch {
-            cursoService.obtenerActividades(unidadId, leccionId)
-                .onSuccess { actividades -> iniciarConActividades(actividades) }
-                .onFailure {
-                    _estadoLeccion.value = EstadoLeccion.Error(
-                        "No se pudo cargar la lección. Inténtalo nuevamente."
-                    )
-                }
+            try {
+                val actividades = unidadesCollection.document(unidadId)
+                    .collection("lecciones").document(leccionId)
+                    .collection("actividades")
+                    .orderBy("orden", Query.Direction.ASCENDING)
+                    .get().await()
+                    .toObjects(Actividad::class.java)
+                    .filter { it.activo }
+                iniciarConActividades(actividades)
+            } catch (e: Exception) {
+                _estadoLeccion.value = EstadoLeccion.Error(
+                    "No se pudo cargar la lección. Inténtalo nuevamente."
+                )
+            }
         }
     }
 
@@ -185,20 +210,27 @@ class LeccionViewModel(
         registrarRespuestaSiCorresponde(actividad, esCorrecta)
     }
 
+    /**
+     * Registra si una respuesta de actividad evaluable fue correcta o incorrecta,
+     * bajo usuarios/{uid}/respuestas. Un documento por actividad (se sobrescribe
+     * si el usuario repite el ejercicio).
+     *
+     * No usamos `await()`: no nos importa esperar el resultado. Firestore guarda la
+     * escritura en cola y la envía sola (incluso si no hay internet en ese momento).
+     */
     private fun registrarRespuestaSiCorresponde(actividad: Actividad, esCorrecta: Boolean) {
         if (actividadesEstaticas != null) return
         val uidActual = uid ?: return
-        viewModelScope.launch {
-            runCatching {
-                firestoreService.registrarRespuesta(
-                    uid = uidActual,
-                    unidadId = unidadId,
-                    leccionId = leccionId,
-                    actividadId = actividad.id,
-                    esCorrecta = esCorrecta,
-                )
-            }
-        }
+        val datos = mapOf(
+            "unidadId" to unidadId,
+            "leccionId" to leccionId,
+            "actividadId" to actividad.id,
+            "esCorrecta" to esCorrecta,
+            "fecha" to Timestamp.now(),
+        )
+        usuariosCollection.document(uidActual)
+            .collection("respuestas").document("${unidadId}_${leccionId}_${actividad.id}")
+            .set(datos)
     }
 
     fun continuar() {
@@ -225,7 +257,7 @@ class LeccionViewModel(
     fun reproducirAudio() {
         val estado = enCursoActual() ?: return
         val actividad = estado.actividadActual
-        val reproduciendo = audioService.reproducir(actividad.audioLocal, actividad.audioUrl) {
+        val reproduciendo = reproducir(actividad.audioLocal, actividad.audioUrl) {
             marcarAudioDetenido()
         }
         if (reproduciendo) {
@@ -236,17 +268,17 @@ class LeccionViewModel(
     fun alternarGrabacion() {
         val estado = enCursoActual() ?: return
         if (estado.grabando) {
-            audioService.detenerGrabacion()
+            detenerGrabacion()
             _estadoLeccion.value = estado.copy(grabando = false, grabacionDisponible = true)
         } else {
-            audioService.iniciarGrabacion()
+            iniciarGrabacion()
             _estadoLeccion.value = estado.copy(grabando = true)
         }
     }
 
     fun reproducirMiGrabacion() {
         val estado = enCursoActual() ?: return
-        val reproduciendo = audioService.reproducirGrabacion { marcarAudioDetenido() }
+        val reproduciendo = reproducirGrabacion { marcarAudioDetenido() }
         if (reproduciendo) {
             _estadoLeccion.value = estado.copy(reproduciendoAudio = true)
         }
@@ -259,10 +291,110 @@ class LeccionViewModel(
 
     private fun enCursoActual(): EstadoLeccion.EnCurso? = _estadoLeccion.value as? EstadoLeccion.EnCurso
 
+    /** Reproduce [audioLocal] (recurso en res/raw) o, si no existe, [audioUrl]. */
+    private fun reproducir(audioLocal: String, audioUrl: String, alTerminar: () -> Unit): Boolean {
+        val idRecurso = if (audioLocal.isNotBlank()) {
+            context.resources.getIdentifier(audioLocal, "raw", context.packageName)
+        } else 0
+
+        liberarReproductor()
+
+        return try {
+            val reproductor = when {
+                idRecurso != 0 -> MediaPlayer.create(context, idRecurso)
+                audioUrl.isNotBlank() -> MediaPlayer().apply {
+                    setDataSource(audioUrl)
+                    prepare()
+                }
+                else -> null
+            } ?: return false
+
+            mediaPlayer = reproductor
+            reproductor.setOnCompletionListener {
+                liberarReproductor()
+                alTerminar()
+            }
+            reproductor.start()
+            true
+        } catch (e: Exception) {
+            liberarReproductor()
+            false
+        }
+    }
+
+    private fun iniciarGrabacion() {
+        liberarReproductor()
+        val grabador = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MediaRecorder(context)
+        } else {
+            @Suppress("DEPRECATION")
+            MediaRecorder()
+        }
+        mediaRecorder = grabador.apply {
+            setAudioSource(MediaRecorder.AudioSource.MIC)
+            setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
+            setOutputFile(archivoGrabacion.absolutePath)
+            prepare()
+            start()
+        }
+    }
+
+    private fun detenerGrabacion() {
+        try {
+            mediaRecorder?.stop()
+        } catch (e: Exception) {
+            // Grabación demasiado corta o sin datos: se descarta silenciosamente.
+        } finally {
+            mediaRecorder?.release()
+            mediaRecorder = null
+        }
+    }
+
+    private fun hayGrabacionDisponible(): Boolean = archivoGrabacion.exists()
+
+    private fun reproducirGrabacion(alTerminar: () -> Unit): Boolean {
+        if (!hayGrabacionDisponible()) return false
+        liberarReproductor()
+        return try {
+            val reproductor = MediaPlayer().apply {
+                setDataSource(archivoGrabacion.absolutePath)
+                prepare()
+            }
+            mediaPlayer = reproductor
+            reproductor.setOnCompletionListener {
+                liberarReproductor()
+                alTerminar()
+            }
+            reproductor.start()
+            true
+        } catch (e: Exception) {
+            liberarReproductor()
+            false
+        }
+    }
+
+    private fun liberar() {
+        liberarReproductor()
+        try {
+            mediaRecorder?.stop()
+        } catch (e: Exception) {
+            // Sin grabación en curso.
+        }
+        mediaRecorder?.release()
+        mediaRecorder = null
+    }
+
+    private fun liberarReproductor() {
+        mediaPlayer?.release()
+        mediaPlayer = null
+    }
+
     override fun onCleared() {
         super.onCleared()
-        audioService.liberar()
+        liberar()
     }
+
     fun anterior() {
         val estado = enCursoActual() ?: return
         if (estado.indice > 0) {
