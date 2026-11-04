@@ -13,14 +13,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -29,9 +26,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.proyect.qchuago.data.entidad.Actividad
 import com.proyect.qchuago.data.entidad.TipoActividad
-import com.proyect.qchuago.data.servicio.AudioService
 import com.proyect.qchuago.ui.screens.leccion.BarraProgresoLeccion
 import com.proyect.qchuago.ui.screens.leccion.BotonInferior
 import com.proyect.qchuago.ui.screens.leccion.PanelRetroalimentacion
@@ -58,16 +56,15 @@ fun LeccionScreen(
     val context = LocalContext.current
     val leccionViewModel: LeccionViewModel = viewModel(
         key = "$unidadId/$leccionId",
-        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                @Suppress("UNCHECKED_CAST")
-                return LeccionViewModel(
+        factory = viewModelFactory {
+            initializer {
+                LeccionViewModel(
                     unidadId = unidadId,
                     leccionId = leccionId,
-                    audioService = AudioService(context.applicationContext),
+                    context = context.applicationContext,
                     actividadesEstaticas = actividadesEstaticas,
                     uid = uid,
-                ) as T
+                )
             }
         },
     )
@@ -86,11 +83,11 @@ fun LeccionScreen(
             .padding(16.dp),
     ) {
         when (val estadoActual = estado) {
-            is EstadoLeccion.Cargando -> CargandoLeccion()
-            is EstadoLeccion.Error -> ErrorLeccion(
+            is EstadoLeccion.Cargando -> PantallaCargando(texto = "Cargando lección...")
+            is EstadoLeccion.Error -> PantallaError(
                 mensaje = estadoActual.mensaje,
                 onReintentar = leccionViewModel::reintentar,
-                onSalir = { onSalir(false) },
+                onVolver = { onSalir(false) },
             )
             is EstadoLeccion.EnCurso -> ContenidoLeccion(
                 estado = estadoActual,
@@ -121,48 +118,6 @@ fun LeccionScreen(
                 totalEvaluables = estadoActual.totalEvaluables,
                 onVolver = { onSalir(true) },
             )
-        }
-    }
-}
-
-@Composable
-private fun CargandoLeccion(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator()
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Cargando lección...",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ErrorLeccion(
-    mensaje: String,
-    onReintentar: () -> Unit,
-    onSalir: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(32.dp),
-        ) {
-            Text("⚠️", fontSize = 48.sp)
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = mensaje,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = onReintentar) { Text("Reintentar") }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onSalir) { Text("Volver") }
         }
     }
 }
