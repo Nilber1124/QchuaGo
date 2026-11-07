@@ -150,7 +150,7 @@ fun AppNavigation(
                 leccionId = leccionId,
                 uid = usuario?.uid,
                 onSalir = { completada ->
-                    if (completada) authViewModel.marcarLeccionCompletada(unidadId, leccionId)
+                    if (completada) authViewModel.actualizarPerfilTrasLeccion()
                     navController.popBackStack()
                 },
             )

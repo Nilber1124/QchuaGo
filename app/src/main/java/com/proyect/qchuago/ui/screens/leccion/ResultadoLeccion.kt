@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +26,10 @@ import androidx.compose.ui.unit.sp
 internal fun ResultadoLeccion(
     correctas: Int,
     totalEvaluables: Int,
+    xpGanados: Int,
+    guardando: Boolean,
+    error: String?,
+    onReintentar: () -> Unit,
     onVolver: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -53,9 +58,33 @@ internal fun ResultadoLeccion(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "+$xpGanados XP ganados",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            if (guardando) {
+                Spacer(Modifier.height(16.dp))
+                CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                Spacer(Modifier.height(6.dp))
+                Text("Guardando tus puntos...")
+            }
+            if (error != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = onReintentar) { Text("Reintentar") }
+            }
             Spacer(Modifier.height(24.dp))
             Button(
                 onClick = onVolver,
+                enabled = !guardando && error == null,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             ) { Text("Volver") }
         }

@@ -1,6 +1,6 @@
 # Estado del proyecto QchuaGo
 
-Última actualización: 4 de noviembre de 2026.
+Última actualización: 7 de noviembre de 2026.
 
 ## Arquitectura y tecnología
 
@@ -236,6 +236,32 @@ Cambios aplicados:
   - No se construyó una pantalla de historial de respuestas individuales (eso viviría
     sobre `usuarios/{uid}/respuestas` de RF08); "resultados" se cubre con los
     porcentajes y conteos agregados.
+- RF15 - Puntos y experiencia (XP):
+  - Cada actividad evaluable respondida correctamente entrega 5 XP una sola vez. El
+    documento de respuesta guarda `xpOtorgado = true`, por lo que repetir la lección
+    no vuelve a premiar la misma actividad. Las respuestas incorrectas entregan 0 XP.
+  - Completar una lección real por primera vez entrega 20 XP adicionales. La misma
+    transacción comprueba `leccionesCompletadasIds`, actualiza el progreso y evita
+    repetir la bonificación.
+  - El XP y el progreso se guardan juntos mediante una transacción de Firestore. Si
+    falla, el resultado muestra un mensaje y permite reintentar; no se muestran ni se
+    conservan puntos que Firebase no haya confirmado.
+  - `ResultadoLeccion` muestra los XP obtenidos en ese intento y `PerfilScreen` sigue
+    mostrando el total persistido en `Usuario.xp`. Al volver, `AuthViewModel` recarga
+    el perfil para reflejar el nuevo total.
+  - La prueba de nivel usa actividades estáticas y no entrega ni guarda XP.
+- RF16 - Racha de aprendizaje:
+  - `Usuario.ultimaFechaPractica` guarda la fecha local en formato `yyyy-MM-dd` y la
+    zona horaria usada para calcular cada día es `America/Lima`.
+  - Al completar una lección real, la misma transacción de RF15 compara la fecha:
+    el mismo día conserva la racha, el día siguiente suma uno y cualquier intervalo
+    mayor reinicia la racha en 1. Repetir una lección también registra la práctica.
+  - La transacción evita incrementos duplicados por pulsaciones o reintentos y guarda
+    `racha` junto con `ultimaFechaPractica` sin sobrescribir otros campos del usuario.
+  - `PerfilScreen` y la barra de Inicio ya mostraban `Usuario.racha`; reutilizan sus
+    iconos y componentes existentes y reciben el valor actualizado al recargar el
+    perfil después de terminar la lección.
+  - Abrir o abandonar una lección y completar la prueba de nivel no modifica la racha.
 
 ## Flujo actual al entrar a Inicio
 
@@ -263,3 +289,5 @@ por completo (ver sección RF06 arriba).
 - `./gradlew assembleDebug`: compilación correcta el 17 de octubre de 2026 tras implementar el marcado de lecciones completadas y la pantalla de Progreso real (RF14).
 - `./gradlew assembleDebug`: compilación correcta el 17 de octubre de 2026 tras la auditoría de código (enum `TipoActividad`, unificación de color, progreso real en Perfil, división de `LeccionScreen.kt`).
 - `./gradlew assembleDebug` y `npm run build` (admin): compilación correcta el 17 de octubre de 2026 tras eliminar por completo el concepto de niveles de dificultad y corregir el desborde de `LeccionScreen` bajo la barra de estado (`systemBarsPadding()`).
+- `gradlew.bat assembleDebug`: compilación correcta el 7 de noviembre de 2026 tras implementar RF15.
+- `gradlew.bat assembleDebug`: compilación correcta el 7 de noviembre de 2026 tras implementar RF16.

@@ -116,6 +116,10 @@ fun LeccionScreen(
             is EstadoLeccion.Finalizada -> ResultadoLeccion(
                 correctas = estadoActual.correctas,
                 totalEvaluables = estadoActual.totalEvaluables,
+                xpGanados = estadoActual.xpGanados,
+                guardando = estadoActual.guardando,
+                error = estadoActual.error,
+                onReintentar = leccionViewModel::reintentarGuardado,
                 onVolver = { onSalir(true) },
             )
         }

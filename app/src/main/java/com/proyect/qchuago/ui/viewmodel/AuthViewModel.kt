@@ -104,6 +104,12 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    /** Vuelve a leer el perfil después de guardar el resultado de una lección. */
+    fun actualizarPerfilTrasLeccion() {
+        val usuarioAuth = auth.currentUser ?: return
+        viewModelScope.launch { cargarPerfil(aUsuario(usuarioAuth)) }
+    }
+
     fun iniciarSesion(correo: String, contrasena: String) {
         _cargando.value = true
         _error.value = null

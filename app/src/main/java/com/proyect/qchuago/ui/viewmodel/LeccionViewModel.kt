@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import com.proyect.qchuago.data.entidad.Actividad
 import com.proyect.qchuago.data.entidad.TipoActividad
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +18,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.File
+import java.time.LocalDate
+import java.time.ZoneId
 
 private val TIPOS_EVALUABLES = setOf(
     TipoActividad.SELECCION,
@@ -48,7 +51,13 @@ sealed class EstadoLeccion {
         val actividadActual: Actividad get() = actividades[indice]
         val esUltima: Boolean get() = indice == actividades.lastIndex
     }
-    data class Finalizada(val correctas: Int, val totalEvaluables: Int) : EstadoLeccion()
+    data class Finalizada(
+        val correctas: Int,
+        val totalEvaluables: Int,
+        val xpGanados: Int = 0,
+        val guardando: Boolean = false,
+        val error: String? = null,
+    ) : EstadoLeccion()
 }
 
 /**
@@ -72,6 +81,7 @@ class LeccionViewModel(
     private var mediaPlayer: MediaPlayer? = null
     private var mediaRecorder: MediaRecorder? = null
     private val archivoGrabacion = File(context.cacheDir, "practica_pronunciacion.3gp")
+    private val respuestasComprobadas = mutableMapOf<String, Boolean>()
 
     private val _estadoLeccion = MutableStateFlow<EstadoLeccion>(EstadoLeccion.Cargando)
     val estadoLeccion: StateFlow<EstadoLeccion> = _estadoLeccion.asStateFlow()
@@ -207,6 +217,8 @@ class LeccionViewModel(
             correctas = if (esCorrecta) estado.correctas + 1 else estado.correctas,
         )
 
+        respuestasComprobadas[actividad.id] = esCorrecta
+
         registrarRespuestaSiCorresponde(actividad, esCorrecta)
     }
 
@@ -230,13 +242,13 @@ class LeccionViewModel(
         )
         usuariosCollection.document(uidActual)
             .collection("respuestas").document("${unidadId}_${leccionId}_${actividad.id}")
-            .set(datos)
+            .set(datos, SetOptions.merge())
     }
 
     fun continuar() {
         val estado = enCursoActual() ?: return
         if (estado.esUltima) {
-            _estadoLeccion.value = EstadoLeccion.Finalizada(estado.correctas, estado.totalEvaluables)
+            finalizarLeccion(estado.correctas, estado.totalEvaluables)
             return
         }
         val siguienteIndice = estado.indice + 1
@@ -251,6 +263,111 @@ class LeccionViewModel(
             verificada = false,
             esCorrecta = null,
             grabacionDisponible = false,
+        )
+    }
+
+    fun reintentarGuardado() {
+        val estado = _estadoLeccion.value as? EstadoLeccion.Finalizada ?: return
+        finalizarLeccion(estado.correctas, estado.totalEvaluables)
+    }
+
+    private fun finalizarLeccion(correctas: Int, totalEvaluables: Int) {
+        if (actividadesEstaticas != null) {
+            _estadoLeccion.value = EstadoLeccion.Finalizada(correctas, totalEvaluables)
+            return
+        }
+
+        val uidActual = uid
+        if (uidActual == null) {
+            mostrarErrorGuardado(correctas, totalEvaluables)
+            return
+        }
+
+        _estadoLeccion.value = EstadoLeccion.Finalizada(
+            correctas = correctas,
+            totalEvaluables = totalEvaluables,
+            guardando = true,
+        )
+
+        viewModelScope.launch {
+            try {
+                val xpGanados = guardarResultado(uidActual)
+                _estadoLeccion.value = EstadoLeccion.Finalizada(
+                    correctas = correctas,
+                    totalEvaluables = totalEvaluables,
+                    xpGanados = xpGanados,
+                )
+            } catch (e: Exception) {
+                mostrarErrorGuardado(correctas, totalEvaluables)
+            }
+        }
+    }
+
+    /** Guarda XP, progreso y racha juntos al completar la lección. */
+    private suspend fun guardarResultado(uidActual: String): Int {
+        val usuarioRef = usuariosCollection.document(uidActual)
+        val respuestas = respuestasComprobadas.toMap()
+        val claveLeccion = "$unidadId/$leccionId"
+        val hoy = LocalDate.now(ZONA_HORARIA_LIMA)
+
+        return firestore.runTransaction { transaccion ->
+            val usuario = transaccion.get(usuarioRef)
+            val idsCompletados = (usuario.get("leccionesCompletadasIds") as? List<*>)
+                ?.filterIsInstance<String>().orEmpty()
+            val respuestasGuardadas = respuestas.map { (actividadId, esCorrecta) ->
+                val referencia = usuarioRef.collection("respuestas")
+                    .document("${unidadId}_${leccionId}_$actividadId")
+                Triple(actividadId, esCorrecta, referencia to transaccion.get(referencia))
+            }
+
+            var xpGanados = respuestasGuardadas.count { (_, esCorrecta, datos) ->
+                esCorrecta && datos.second.getBoolean("xpOtorgado") != true
+            } * XP_RESPUESTA_CORRECTA
+
+            val esPrimeraVez = claveLeccion !in idsCompletados
+            val nuevosIds = if (esPrimeraVez) idsCompletados + claveLeccion else idsCompletados
+            if (esPrimeraVez) xpGanados += XP_LECCION_COMPLETADA
+
+            val nuevaRacha = calcularRacha(
+                rachaActual = (usuario.getLong("racha") ?: 0L).toInt(),
+                ultimaFecha = usuario.getString("ultimaFechaPractica").orEmpty(),
+                hoy = hoy,
+            )
+
+            transaccion.update(
+                usuarioRef,
+                mapOf(
+                    "xp" to ((usuario.getLong("xp") ?: 0L) + xpGanados),
+                    "racha" to nuevaRacha,
+                    "ultimaFechaPractica" to hoy.toString(),
+                    "leccionesCompletadasIds" to nuevosIds,
+                    "leccionesCompletadas" to nuevosIds.size,
+                ),
+            )
+
+            respuestasGuardadas.forEach { (actividadId, esCorrecta, datos) ->
+                val respuesta = mutableMapOf<String, Any>(
+                    "unidadId" to unidadId,
+                    "leccionId" to leccionId,
+                    "actividadId" to actividadId,
+                    "esCorrecta" to esCorrecta,
+                    "fecha" to Timestamp.now(),
+                )
+                if (esCorrecta && datos.second.getBoolean("xpOtorgado") != true) {
+                    respuesta["xpOtorgado"] = true
+                }
+                transaccion.set(datos.first, respuesta, SetOptions.merge())
+            }
+
+            xpGanados
+        }.await()
+    }
+
+    private fun mostrarErrorGuardado(correctas: Int, totalEvaluables: Int) {
+        _estadoLeccion.value = EstadoLeccion.Finalizada(
+            correctas = correctas,
+            totalEvaluables = totalEvaluables,
+            error = "No se pudo guardar el resultado. Revisa tu conexión e inténtalo nuevamente.",
         )
     }
 
@@ -412,5 +529,18 @@ class LeccionViewModel(
                 grabacionDisponible = false,
             )
         }
+    }
+}
+
+private const val XP_RESPUESTA_CORRECTA = 5
+private const val XP_LECCION_COMPLETADA = 20
+private val ZONA_HORARIA_LIMA = ZoneId.of("America/Lima")
+
+private fun calcularRacha(rachaActual: Int, ultimaFecha: String, hoy: LocalDate): Int {
+    val fechaAnterior = runCatching { LocalDate.parse(ultimaFecha) }.getOrNull()
+    return when (fechaAnterior) {
+        hoy -> rachaActual
+        hoy.minusDays(1) -> rachaActual + 1
+        else -> 1
     }
 }
