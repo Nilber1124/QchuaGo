@@ -21,6 +21,7 @@ data class ResumenProgresoCurso(
     val leccionesCompletadas: Int = 0,
     val unidadesCompletadas: Int = 0,
     val siguienteLeccion: Pair<Unidad, Leccion>? = null,
+    val siguienteEvaluacion: Unidad? = null,
 ) {
     /** Porcentaje de 0 a 100 para mostrar en barras de progreso. */
     val porcentaje: Int
@@ -80,16 +81,20 @@ class CursoViewModel : ViewModel() {
      * Resumen del avance del usuario en el curso (porcentaje, completadas, siguiente lección).
      * Si el curso todavía no cargó, devuelve un resumen vacío (todo en 0).
      *
-     * Uso en una pantalla: `val resumen = cursoViewModel.resumen(usuario?.leccionesCompletadasIds.orEmpty())`
+     * Recibe el progreso de lecciones y las evaluaciones de unidad aprobadas.
      */
-    fun resumen(leccionesCompletadasIds: List<String>): ResumenProgresoCurso {
+    fun resumen(
+        leccionesCompletadasIds: List<String>,
+        evaluacionesAprobadasIds: List<String>,
+    ): ResumenProgresoCurso {
         val unidades = (_estadoCurso.value as? Recurso.Exito)?.datos ?: return ResumenProgresoCurso()
-        return calcularResumenProgreso(unidades, leccionesCompletadasIds)
+        return calcularResumenProgreso(unidades, leccionesCompletadasIds, evaluacionesAprobadasIds)
     }
 
     private fun calcularResumenProgreso(
         unidades: List<Unidad>,
         leccionesCompletadasIds: List<String>,
+        evaluacionesAprobadasIds: List<String>,
     ): ResumenProgresoCurso {
         val totalLecciones = unidades.sumOf { it.lecciones.size }
 
@@ -97,36 +102,43 @@ class CursoViewModel : ViewModel() {
             unidad.lecciones.count { estaCompletada(unidad, it, leccionesCompletadasIds) }
         }
 
-        val unidadesCompletadas = unidades.count { unidad ->
-            unidad.lecciones.isNotEmpty() && unidad.lecciones.all {
-                estaCompletada(unidad, it, leccionesCompletadasIds)
-            }
-        }
+        val unidadesCompletadas = unidades.count { it.id in evaluacionesAprobadasIds }
 
         // La siguiente lección pendiente es la primera que aún no esté completada
         val siguienteLeccion = unidades
             .flatMap { unidad -> unidad.lecciones.map { unidad to it } }
             .firstOrNull { (unidad, leccion) ->
-                !estaCompletada(unidad, leccion, leccionesCompletadasIds)
+                !estaCompletada(unidad, leccion, leccionesCompletadasIds) &&
+                    estaDesbloqueada(
+                        unidad, leccion, leccionesCompletadasIds, evaluacionesAprobadasIds
+                    )
             }
+
+        val siguienteEvaluacion = unidades.firstOrNull { unidad ->
+            unidad.id !in evaluacionesAprobadasIds &&
+                puedeEvaluar(unidad, leccionesCompletadasIds) &&
+                estaDesbloqueadaUnidad(unidad, evaluacionesAprobadasIds)
+        }
 
         return ResumenProgresoCurso(
             totalLecciones = totalLecciones,
             leccionesCompletadas = leccionesCompletadas,
             unidadesCompletadas = unidadesCompletadas,
             siguienteLeccion = siguienteLeccion,
+            siguienteEvaluacion = siguienteEvaluacion,
         )
     }
 
     /**
      * Una lección está desbloqueada si:
-     * 1. Todas las unidades anteriores están completas.
+     * 1. Las evaluaciones de todas las unidades anteriores están aprobadas.
      * 2. Todas las lecciones anteriores dentro de la misma unidad están completas.
      */
     fun estaDesbloqueada(
         unidad: Unidad,
         leccion: Leccion,
         leccionesCompletadasIds: List<String>,
+        evaluacionesAprobadasIds: List<String>,
     ): Boolean {
         val estado = _estadoCurso.value as? Recurso.Exito<List<Unidad>> ?: return false
         val unidadActual = estado.datos.firstOrNull { it.id == unidad.id } ?: return false
@@ -136,9 +148,7 @@ class CursoViewModel : ViewModel() {
         val unidadesPrevias = estado.datos.takeWhile { it.id != unidadActual.id }
         val leccionesPrevias = unidadActual.lecciones.take(indice)
 
-        val unidadesPreviasListas = unidadesPrevias.all { anterior ->
-            anterior.lecciones.all { estaCompletada(anterior, it, leccionesCompletadasIds) }
-        }
+        val unidadesPreviasListas = unidadesPrevias.all { it.id in evaluacionesAprobadasIds }
         val leccionesPreviasListas = leccionesPrevias.all {
             estaCompletada(unidadActual, it, leccionesCompletadasIds)
         }
@@ -147,15 +157,22 @@ class CursoViewModel : ViewModel() {
     }
 
     /**
-     * Una unidad está desbloqueada si todas las lecciones de las unidades anteriores están completas.
+     * Una unidad está desbloqueada si las evaluaciones anteriores están aprobadas.
      */
-    fun estaDesbloqueadaUnidad(unidad: Unidad, leccionesCompletadasIds: List<String>): Boolean {
+    fun estaDesbloqueadaUnidad(
+        unidad: Unidad,
+        evaluacionesAprobadasIds: List<String>,
+    ): Boolean {
         val estado = _estadoCurso.value as? Recurso.Exito<List<Unidad>> ?: return false
         val unidadesPrevias = estado.datos.takeWhile { it.id != unidad.id }
-        return unidadesPrevias.all { anterior ->
-            anterior.lecciones.all { estaCompletada(anterior, it, leccionesCompletadasIds) }
-        }
+        return unidadesPrevias.all { it.id in evaluacionesAprobadasIds }
     }
+
+    /** La evaluación aparece cuando todas las lecciones de la unidad están completas. */
+    fun puedeEvaluar(unidad: Unidad, leccionesCompletadasIds: List<String>): Boolean =
+        unidad.lecciones.isNotEmpty() && unidad.lecciones.all {
+            estaCompletada(unidad, it, leccionesCompletadasIds)
+        }
 
     /**
      * Comprueba si una lección específica ya fue completada por el usuario.

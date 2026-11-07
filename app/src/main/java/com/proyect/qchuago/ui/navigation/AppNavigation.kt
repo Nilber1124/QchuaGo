@@ -28,6 +28,7 @@ import com.proyect.qchuago.R
 import com.proyect.qchuago.data.entidad.Usuario
 import com.proyect.qchuago.ui.screens.BienvenidaScreen
 import com.proyect.qchuago.ui.screens.ElegirNivelScreen
+import com.proyect.qchuago.ui.screens.EvaluacionScreen
 import com.proyect.qchuago.ui.screens.HomeScreen
 import com.proyect.qchuago.ui.screens.LeccionScreen
 import com.proyect.qchuago.ui.screens.LoginScreen
@@ -44,12 +45,16 @@ object Rutas {
     const val PRUEBA_NIVEL = "prueba_nivel"
     const val HOME = "home"
     const val LECCION = "leccion"
+    const val EVALUACION = "evaluacion"
 
     /** Patrón que registra el NavHost (los {} son los argumentos). */
     const val LECCION_PATRON = "$LECCION/{unidadId}/{leccionId}"
+    const val EVALUACION_PATRON = "$EVALUACION/{unidadId}"
 
     /** Ruta concreta para abrir una lección: `navController.navigate(Rutas.leccion(u, l))`. */
     fun leccion(unidadId: String, leccionId: String): String = "$LECCION/$unidadId/$leccionId"
+
+    fun evaluacion(unidadId: String): String = "$EVALUACION/$unidadId"
 
     /** Decide a dónde navegar tras autenticar: bienvenida la primera vez, Home después. */
     fun destinoTrasAutenticar(usuario: Usuario): String =
@@ -150,9 +155,21 @@ fun AppNavigation(
                 leccionId = leccionId,
                 uid = usuario?.uid,
                 onSalir = { completada ->
-                    if (completada) authViewModel.actualizarPerfilTrasLeccion()
+                    if (completada) authViewModel.actualizarPerfil()
                     navController.popBackStack()
                 },
+            )
+        }
+        composable(
+            route = Rutas.EVALUACION_PATRON,
+            arguments = listOf(navArgument("unidadId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val unidadId = backStackEntry.arguments?.getString("unidadId") ?: return@composable
+            EvaluacionScreen(
+                unidadId = unidadId,
+                uid = usuario?.uid,
+                onResultadoGuardado = authViewModel::actualizarPerfil,
+                onVolver = { navController.popBackStack() },
             )
         }
     }

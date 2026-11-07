@@ -66,6 +66,9 @@ fun HomeScreen(
     val abrirLeccion: (Unidad, Leccion) -> Unit = { unidad, leccion ->
         navController.navigate(Rutas.leccion(unidad.id, leccion.id))
     }
+    val abrirEvaluacion: (Unidad) -> Unit = { unidad ->
+        navController.navigate(Rutas.evaluacion(unidad.id))
+    }
 
     LaunchedEffect(usuario) {
         if (usuario == null) {
@@ -94,11 +97,13 @@ fun HomeScreen(
                     authViewModel = authViewModel,
                     cursoViewModel = cursoViewModel,
                     onAbrirLeccion = abrirLeccion,
+                    onAbrirEvaluacion = abrirEvaluacion,
                 )
                 NavTab.PROGRESO -> ProgresoScreen(
                     authViewModel = authViewModel,
                     cursoViewModel = cursoViewModel,
                     onAbrirLeccion = abrirLeccion,
+                    onAbrirEvaluacion = abrirEvaluacion,
                 )
                 NavTab.DICCIONARIO -> DiccionarioScreen()
                 NavTab.REPASO -> RepasoScreen()

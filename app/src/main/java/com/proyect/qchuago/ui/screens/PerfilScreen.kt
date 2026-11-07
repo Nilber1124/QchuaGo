@@ -42,7 +42,10 @@ fun PerfilScreen(
     val temaOscuro by authViewModel.temaOscuro.collectAsState()
     // Se observa el curso para que el resumen se recalcule cuando termine de cargar.
     val estadoCurso by cursoViewModel.estadoCurso.collectAsState()
-    val resumen = cursoViewModel.resumen(usuario?.leccionesCompletadasIds.orEmpty())
+    val resumen = cursoViewModel.resumen(
+        usuario?.leccionesCompletadasIds.orEmpty(),
+        usuario?.evaluacionesAprobadasIds.orEmpty(),
+    )
 
     PerfilScreen(
         usuario = usuario,

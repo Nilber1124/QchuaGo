@@ -156,13 +156,16 @@ Cambios aplicados:
   siguiente de esa unidad — **no** a las dificultades Básico/Intermedio/Avanzado que
   existían como colección Firestore `niveles`, un concepto distinto que nunca fue
   parte de este requerimiento):
-  - **Cumplido.** El desbloqueo secuencial lección-a-lección (y unidad-a-unidad) ya
+  - **Cumplido.** El desbloqueo secuencial lección-a-lección (y originalmente
+    unidad-a-unidad) ya
     estaba implementado por RF07 en `CursoViewModel.estaDesbloqueada` /
     `estaDesbloqueadaUnidad` / `estaCompletada`, pero quedaba inerte porque nada
     marcaba `Usuario.leccionesCompletadasIds`. RF14 cerró ese hueco: ahora, al
     terminar una lección real, `AppNavigation` agrega su clave `unidadId/leccionId` a
     esa lista, lo que activa el desbloqueo de la siguiente lección/unidad
-    automáticamente (reactivo vía `StateFlow`, sin recargar la app).
+    automáticamente (reactivo vía `StateFlow`, sin recargar la app). Desde RF19,
+    completar las lecciones habilita la evaluación y aprobarla desbloquea la siguiente
+    unidad.
   - **El concepto de "niveles" de dificultad (Básico/Intermedio/Avanzado) se eliminó
     por completo el 17 de octubre de 2026**, a pedido del usuario, porque en la
     práctica nunca aportaba nada: `CursoViewModel` solo cargaba el primer nivel y los
@@ -262,12 +265,46 @@ Cambios aplicados:
     iconos y componentes existentes y reciben el valor actualizado al recargar el
     perfil después de terminar la lección.
   - Abrir o abandonar una lección y completar la prueba de nivel no modifica la racha.
+- RF19 - Evaluaciones de unidad:
+  - Al completar todas las lecciones de una unidad aparece el botón "Evaluación
+    final" en Inicio y también se ofrece desde la tarjeta de continuar en Progreso.
+  - `EvaluacionViewModel` obtiene, en el orden del curso, hasta 10 actividades
+    `SELECCION` válidas de las lecciones de esa unidad. Si existen menos, utiliza las
+    disponibles; no crea preguntas ni respuestas nuevas.
+  - `EvaluacionScreen` muestra una pregunta por vez y calcula el porcentaje entero con
+    `(correctas * 100) / total`. Se aprueba con 70 % o más y, si se desaprueba, se
+    puede repetir.
+  - El resultado se guarda mediante una transacción en
+    `usuarios/{uid}/evaluaciones/{unidadId}` con `unidadId`, `calificacion`, `aprobada`
+    y `fecha`. Se conserva la mejor calificación y una aprobación nunca vuelve a
+    perderse. `Usuario.evaluacionesAprobadasIds` permite reflejar el desbloqueo de
+    forma reactiva y conservarlo al reiniciar.
+  - La primera unidad permanece disponible. Dentro de una unidad, las lecciones siguen
+    desbloqueándose secuencialmente; la siguiente unidad requiere que la evaluación
+    anterior esté aprobada. El ViewModel también comprueba en Firestore que todas las
+    lecciones estén completas antes de iniciar una evaluación.
+  - Las evaluaciones no llaman a la lógica de finalización de lecciones, por lo que no
+    entregan XP, no actualizan la racha y no modifican vidas ni respuestas.
+- RF20 - Clasificación o ranking semanal:
+  - Muestra la tabla de posiciones semanal basada en los XP ganados durante la semana actual
+    (`rankingsSemanales/{semanaId}/usuarios/{uid}`). La semana se calcula según el estándar
+    ISO (lunes a domingo) en la zona horaria `America/Lima` (ej. `2026-W45`).
+  - Los XP semanales se incrementan atómicamente dentro de la misma transacción de Firestore
+    de RF15 en `LeccionViewModel.guardarResultado`, garantizando que no haya duplicados ni
+    falsas recompensas. El XP total del usuario no se reinicia.
+  - La interfaz está integrada al final de `ProgresoScreen.kt` (debajo de la lista de unidades)
+    y consta de un podio visual de 3 barras verticales (2° en plata a la izquierda, 1° en oro
+    en el centro más alto, 3° en bronce a la derecha) con medallas 🥇, 🥈, 🥉, más la lista
+    de clasificación para puestos inferiores (#4 en adelante).
+  - El usuario autenticado aparece resaltado con fondo y borde verde. Si no pertenece al
+    top 20, se realiza una consulta adicional para obtener y mostrar su posición real.
+  - Maneja adecuadamente los estados de carga, lista vacía, éxito y error con opción de reintento.
 
 ## Flujo actual al entrar a Inicio
 
 ```text
-INICIO -> Todas las unidades y lecciones existentes (sin agrupación por nivel de
-dificultad), con desbloqueo secuencial lección a lección y unidad a unidad (RF06+RF07+RF14)
+INICIO -> Unidad disponible -> Lecciones secuenciales -> Evaluación final (70 %)
+       -> Siguiente unidad (RF06+RF07+RF14+RF19)
 ```
 
 No existe pantalla de selección de nivel ni de selección de unidades — RF06 es el
@@ -291,3 +328,5 @@ por completo (ver sección RF06 arriba).
 - `./gradlew assembleDebug` y `npm run build` (admin): compilación correcta el 17 de octubre de 2026 tras eliminar por completo el concepto de niveles de dificultad y corregir el desborde de `LeccionScreen` bajo la barra de estado (`systemBarsPadding()`).
 - `gradlew.bat assembleDebug`: compilación correcta el 7 de noviembre de 2026 tras implementar RF15.
 - `gradlew.bat assembleDebug`: compilación correcta el 7 de noviembre de 2026 tras implementar RF16.
+- `gradlew.bat assembleDebug`: compilación correcta el 7 de noviembre de 2026 tras implementar RF19.
+- `gradlew.bat assembleDebug`: compilación correcta el 7 de noviembre de 2026 tras implementar RF20.

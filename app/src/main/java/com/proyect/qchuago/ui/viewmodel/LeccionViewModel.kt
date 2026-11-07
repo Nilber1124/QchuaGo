@@ -20,6 +20,7 @@ import kotlinx.coroutines.tasks.await
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.WeekFields
 
 private val TIPOS_EVALUABLES = setOf(
     TipoActividad.SELECCION,
@@ -298,6 +299,7 @@ class LeccionViewModel(
                     xpGanados = xpGanados,
                 )
             } catch (e: Exception) {
+                android.util.Log.e("LeccionViewModel", "Error al guardar resultado de leccion: ${e.message}", e)
                 mostrarErrorGuardado(correctas, totalEvaluables)
             }
         }
@@ -311,14 +313,24 @@ class LeccionViewModel(
         val hoy = LocalDate.now(ZONA_HORARIA_LIMA)
 
         return firestore.runTransaction { transaccion ->
+            val semanaId = RankingViewModel.obtenerSemanaActual()
+            val rankingRef = firestore.collection("rankingsSemanales")
+                .document(semanaId)
+                .collection("usuarios")
+                .document(uidActual)
+
+            // --- 1. LECTURAS PRIMERO (Regla obligatoria de las transacciones de Firestore) ---
             val usuario = transaccion.get(usuarioRef)
-            val idsCompletados = (usuario.get("leccionesCompletadasIds") as? List<*>)
-                ?.filterIsInstance<String>().orEmpty()
+            val docRankingSnap = transaccion.get(rankingRef)
             val respuestasGuardadas = respuestas.map { (actividadId, esCorrecta) ->
                 val referencia = usuarioRef.collection("respuestas")
                     .document("${unidadId}_${leccionId}_$actividadId")
                 Triple(actividadId, esCorrecta, referencia to transaccion.get(referencia))
             }
+
+            // --- 2. CÁLCULO DE RECOMPENSAS Y PROGRESO EN MEMORIA ---
+            val idsCompletados = (usuario.get("leccionesCompletadasIds") as? List<*>)
+                ?.filterIsInstance<String>().orEmpty()
 
             var xpGanados = respuestasGuardadas.count { (_, esCorrecta, datos) ->
                 esCorrecta && datos.second.getBoolean("xpOtorgado") != true
@@ -334,6 +346,7 @@ class LeccionViewModel(
                 hoy = hoy,
             )
 
+            // --- 3. ESCRITURAS AL FINAL ---
             transaccion.update(
                 usuarioRef,
                 mapOf(
@@ -357,6 +370,21 @@ class LeccionViewModel(
                     respuesta["xpOtorgado"] = true
                 }
                 transaccion.set(datos.first, respuesta, SetOptions.merge())
+            }
+
+            if (xpGanados > 0) {
+                val xpSemanalPrevio = (docRankingSnap.getLong("xpSemanal") ?: 0L).toInt()
+                val nombreUsuario = usuario.getString("nombre")?.ifBlank { "Estudiante" } ?: "Estudiante"
+
+                transaccion.set(
+                    rankingRef,
+                    mapOf(
+                        "uid" to uidActual,
+                        "nombre" to nombreUsuario,
+                        "xpSemanal" to (xpSemanalPrevio + xpGanados),
+                    ),
+                    SetOptions.merge(),
+                )
             }
 
             xpGanados

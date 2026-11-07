@@ -23,5 +23,6 @@ data class Usuario(
     val leccionesCompletadas: Int = 0,
     val totalLecciones: Int = 9,
     val leccionesCompletadasIds: List<String> = emptyList(),
+    val evaluacionesAprobadasIds: List<String> = emptyList(),
     val onboardingCompletado: Boolean = false,
 )

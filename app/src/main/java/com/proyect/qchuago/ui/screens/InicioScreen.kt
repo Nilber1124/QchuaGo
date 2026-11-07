@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -67,15 +68,17 @@ import kotlinx.coroutines.delay
 fun InicioScreen(
     authViewModel: AuthViewModel,
     onAbrirLeccion: (Unidad, Leccion) -> Unit,
+    onAbrirEvaluacion: (Unidad) -> Unit,
     cursoViewModel: CursoViewModel = viewModel(),
     modifier: Modifier = Modifier,
 ) {
     val usuario by authViewModel.usuario.collectAsState()
     val estadoCurso by cursoViewModel.estadoCurso.collectAsState()
     val leccionesCompletadasIds = usuario?.leccionesCompletadasIds ?: emptyList()
+    val evaluacionesAprobadasIds = usuario?.evaluacionesAprobadasIds ?: emptyList()
 
     // Mismo resumen de progreso que usan Progreso y Perfil (vacío mientras carga).
-    val resumen = cursoViewModel.resumen(leccionesCompletadasIds)
+    val resumen = cursoViewModel.resumen(leccionesCompletadasIds, evaluacionesAprobadasIds)
 
     Column(modifier = modifier.fillMaxSize()) {
         BarraSuperiorAprendizaje(
@@ -117,7 +120,7 @@ fun InicioScreen(
                     }
                     unidades.forEach { unidad ->
                         val unidadDesbloqueada = cursoViewModel.estaDesbloqueadaUnidad(
-                            unidad, leccionesCompletadasIds
+                            unidad, evaluacionesAprobadasIds
                         )
                         item(key = "banner_${unidad.id}") {
                             BannerUnidad(unidad = unidad, desbloqueada = unidadDesbloqueada)
@@ -127,7 +130,10 @@ fun InicioScreen(
                             key = { _, lec -> "lec_${unidad.id}_${lec.id}" },
                         ) { index, leccion ->
                             val desbloqueada = cursoViewModel.estaDesbloqueada(
-                                unidad, leccion, leccionesCompletadasIds
+                                unidad,
+                                leccion,
+                                leccionesCompletadasIds,
+                                evaluacionesAprobadasIds,
                             )
                             BurbujaLeccion(
                                 leccion = leccion,
@@ -142,6 +148,17 @@ fun InicioScreen(
                                 },
                             )
                         }
+                        if (
+                            unidadDesbloqueada &&
+                            cursoViewModel.puedeEvaluar(unidad, leccionesCompletadasIds)
+                        ) {
+                            item(key = "evaluacion_${unidad.id}") {
+                                BotonEvaluacion(
+                                    aprobada = unidad.id in evaluacionesAprobadasIds,
+                                    onClick = { onAbrirEvaluacion(unidad) },
+                                )
+                            }
+                        }
                         item(key = "spacer_${unidad.id}") {
                             Spacer(Modifier.height(20.dp))
                         }
@@ -149,6 +166,23 @@ fun InicioScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BotonEvaluacion(
+    aprobada: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        enabled = !aprobada,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 48.dp, vertical = 10.dp),
+    ) {
+        Text(if (aprobada) "✅ Evaluación aprobada" else "📝 Evaluación final")
     }
 }
 
