@@ -26,11 +26,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavHostController
+import com.proyect.qchuago.ui.navigation.Rutas
+import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 
 @Composable
 fun ElegirNivelScreen(
-    onPrincipiante: () -> Unit,
-    onTestNivel: () -> Unit,
+    navController: NavHostController,
+    authViewModel: AuthViewModel,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -55,14 +58,19 @@ fun ElegirNivelScreen(
             emoji = "🌱",
             titulo = "Principiante",
             descripcion = "No conozco nada de quechua — empiezo desde cero",
-            onClick = onPrincipiante,
+            onClick = {
+                authViewModel.completarOnboarding()
+                navController.navigate(Rutas.HOME) {
+                    popUpTo(navController.graph.id) { inclusive = true }
+                }
+            },
         )
         Spacer(modifier = Modifier.height(16.dp))
         TarjetaOpcionNivel(
             emoji = "🎯",
             titulo = "Test de nivel",
             descripcion = "Ya conozco algo de quechua — quiero una evaluación",
-            onClick = onTestNivel,
+            onClick = { navController.navigate(Rutas.PRUEBA_NIVEL) },
         )
     }
 }

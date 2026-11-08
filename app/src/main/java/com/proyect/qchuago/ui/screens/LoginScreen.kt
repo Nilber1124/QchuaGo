@@ -36,50 +36,32 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
 import com.proyect.qchuago.R
-import com.proyect.qchuago.data.entidad.Usuario
+import com.proyect.qchuago.ui.navigation.Rutas
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 
 @Composable
 fun LoginScreen(
+    navController: NavHostController,
     authViewModel: AuthViewModel,
-    onAutenticado: (Usuario) -> Unit,
-    onIrARegistro: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val cargando by authViewModel.cargando.collectAsState()
     val error by authViewModel.error.collectAsState()
     val usuario by authViewModel.usuario.collectAsState()
-
-    LoginScreen(
-        cargando = cargando,
-        error = error,
-        usuario = usuario,
-        onIniciarSesion = authViewModel::iniciarSesion,
-        onAutenticado = onAutenticado,
-        onIrARegistro = onIrARegistro,
-        modifier = modifier,
-    )
-}
-
-@Composable
-fun LoginScreen(
-    cargando: Boolean,
-    error: String?,
-    usuario: Usuario?,
-    onIniciarSesion: (correo: String, contrasena: String) -> Unit,
-    onAutenticado: (Usuario) -> Unit,
-    onIrARegistro: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
     var correo by rememberSaveable { mutableStateOf("") }
     var contrasena by rememberSaveable { mutableStateOf("") }
     var mensajeError by remember { mutableStateOf<String?>(null) }
     val errorVisible = mensajeError ?: error
 
-    // Cuando el login/registro termina bien, el ViewModel llena `usuario` y avisamos hacia arriba.
+    // Cuando el login/registro termina bien, el ViewModel llena `usuario` y navegamos.
     LaunchedEffect(usuario) {
-        usuario?.let(onAutenticado)
+        usuario?.let {
+            navController.navigate(Rutas.destinoTrasAutenticar(it)) {
+                popUpTo(navController.graph.id) { inclusive = true }
+            }
+        }
     }
 
     Column(
@@ -145,7 +127,7 @@ fun LoginScreen(
                     mensajeError = "Ingresa tu correo y contraseña."
                 } else {
                     mensajeError = null
-                    onIniciarSesion(correo, contrasena)
+                    authViewModel.iniciarSesion(correo, contrasena)
                 }
             },
             enabled = !cargando,
@@ -166,7 +148,7 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("¿No tienes cuenta?", style = MaterialTheme.typography.bodyMedium)
-            TextButton(onClick = onIrARegistro) {
+            TextButton(onClick = { navController.navigate(Rutas.REGISTRO) }) {
                 Text("Registrarse")
             }
         }

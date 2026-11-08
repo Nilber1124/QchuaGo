@@ -45,6 +45,10 @@ class AuthViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    /** `true` justo después de guardar el nombre o la contraseña con éxito. */
+    private val _guardadoExitoso = MutableStateFlow(false)
+    val guardadoExitoso: StateFlow<Boolean> = _guardadoExitoso.asStateFlow()
+
     init {
         // Si ya había una sesión guardada, cargamos su perfil antes de mostrar la app.
         val usuarioAuth = auth.currentUser
@@ -143,18 +147,18 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    fun actualizarNombre(nuevoNombre: String, onSuccess: () -> Unit) {
+    fun actualizarNombre(nuevoNombre: String) {
         if (nuevoNombre.isBlank()) {
             _error.value = "El nombre no puede estar vacío."
             return
         }
         _error.value = null
-        actualizarUsuario(onCompletado = { exito -> if (exito) onSuccess() }) {
+        actualizarUsuario(onCompletado = { exito -> _guardadoExitoso.value = exito }) {
             it.copy(nombre = nuevoNombre.trim())
         }
     }
 
-    fun cambiarContrasena(nueva: String, confirmar: String, onSuccess: () -> Unit) {
+    fun cambiarContrasena(nueva: String, confirmar: String) {
         if (nueva.isBlank() || confirmar.isBlank()) {
             _error.value = "Las contraseñas no pueden estar vacías."
             return
@@ -174,7 +178,7 @@ class AuthViewModel : ViewModel() {
             try {
                 val user = auth.currentUser ?: throw Exception("Sin sesión")
                 user.updatePassword(nueva).await()
-                onSuccess()
+                _guardadoExitoso.value = true
             } catch (e: Exception) {
                 _error.value = mensajeComprensible(e)
             }
@@ -190,6 +194,11 @@ class AuthViewModel : ViewModel() {
 
     fun limpiarError() {
         _error.value = null
+    }
+
+    /** La UI llama esto apenas reacciona a [guardadoExitoso], para no repetir la acción. */
+    fun limpiarGuardadoExitoso() {
+        _guardadoExitoso.value = false
     }
 
     /**

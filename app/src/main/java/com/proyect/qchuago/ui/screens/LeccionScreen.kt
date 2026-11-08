@@ -28,8 +28,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.navigation.NavHostController
 import com.proyect.qchuago.data.entidad.Actividad
 import com.proyect.qchuago.data.entidad.TipoActividad
+import com.proyect.qchuago.ui.navigation.Rutas
 import com.proyect.qchuago.ui.screens.leccion.BarraProgresoLeccion
 import com.proyect.qchuago.ui.screens.leccion.BotonInferior
 import com.proyect.qchuago.ui.screens.leccion.PanelRetroalimentacion
@@ -40,6 +42,7 @@ import com.proyect.qchuago.ui.screens.leccion.TarjetaContenido
 import com.proyect.qchuago.ui.screens.leccion.TarjetaEscucha
 import com.proyect.qchuago.ui.screens.leccion.TarjetaOrdenar
 import com.proyect.qchuago.ui.screens.leccion.TarjetaSeleccion
+import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 import com.proyect.qchuago.ui.viewmodel.EstadoLeccion
 import com.proyect.qchuago.ui.viewmodel.LeccionViewModel
 
@@ -47,14 +50,15 @@ private val TIPOS_CONTENIDO = setOf(TipoActividad.VOCABULARIO)
 
 @Composable
 fun LeccionScreen(
+    navController: NavHostController,
+    authViewModel: AuthViewModel,
     unidadId: String,
     leccionId: String,
-    onSalir: (completada: Boolean) -> Unit,
     modifier: Modifier = Modifier,
     actividadesEstaticas: List<Actividad>? = null,
-    uid: String? = null,
 ) {
     val context = LocalContext.current
+    val usuario by authViewModel.usuario.collectAsState()
     val leccionViewModel: LeccionViewModel = viewModel(
         key = "$unidadId/$leccionId",
         factory = viewModelFactory {
@@ -64,12 +68,26 @@ fun LeccionScreen(
                     leccionId = leccionId,
                     context = context.applicationContext,
                     actividadesEstaticas = actividadesEstaticas,
-                    uid = uid,
+                    uid = usuario?.uid,
                 )
             }
         },
     )
     val estado by leccionViewModel.estadoLeccion.collectAsState()
+
+    // "Test de nivel" (actividadesEstaticas != null) siempre termina en Home marcando el
+    // onboarding; una lección real solo actualiza el perfil si se completó y vuelve atrás.
+    val onSalir: (completada: Boolean) -> Unit = { completada ->
+        if (actividadesEstaticas != null) {
+            authViewModel.completarOnboarding()
+            navController.navigate(Rutas.HOME) {
+                popUpTo(navController.graph.id) { inclusive = true }
+            }
+        } else {
+            if (completada) authViewModel.actualizarPerfil()
+            navController.popBackStack()
+        }
+    }
 
     val lanzadorPermisoAudio = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -93,26 +111,28 @@ fun LeccionScreen(
             is EstadoLeccion.EnCurso -> ContenidoLeccion(
                 estado = estadoActual,
                 onSalir = { onSalir(false) },
-                onSeleccionarOpcion = leccionViewModel::seleccionarOpcion,
-                onActualizarTexto = leccionViewModel::actualizarTexto,
-                onAgregarElemento = leccionViewModel::agregarElemento,
-                onQuitarUltimoElemento = leccionViewModel::quitarUltimoElemento,
-                onSeleccionarElementoAsociar = leccionViewModel::seleccionarElementoAsociar,
-                onSeleccionarOpcionAsociar = leccionViewModel::seleccionarOpcionAsociar,
-                onComprobar = leccionViewModel::comprobar,
-                onContinuar = leccionViewModel::continuar,
-                onReproducirAudio = leccionViewModel::reproducirAudio,
-                onGrabar = {
-                    val permisoConcedido = ContextCompat.checkSelfPermission(
-                        context, Manifest.permission.RECORD_AUDIO,
-                    ) == PackageManager.PERMISSION_GRANTED
-                    if (permisoConcedido || estadoActual.grabando) {
-                        leccionViewModel.alternarGrabacion()
-                    } else {
-                        lanzadorPermisoAudio.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                },
-                onReproducirMiGrabacion = leccionViewModel::reproducirMiGrabacion,
+                acciones = AccionesLeccion(
+                    onSeleccionarOpcion = leccionViewModel::seleccionarOpcion,
+                    onActualizarTexto = leccionViewModel::actualizarTexto,
+                    onAgregarElemento = leccionViewModel::agregarElemento,
+                    onQuitarUltimoElemento = leccionViewModel::quitarUltimoElemento,
+                    onSeleccionarElementoAsociar = leccionViewModel::seleccionarElementoAsociar,
+                    onSeleccionarOpcionAsociar = leccionViewModel::seleccionarOpcionAsociar,
+                    onComprobar = leccionViewModel::comprobar,
+                    onContinuar = leccionViewModel::continuar,
+                    onReproducirAudio = leccionViewModel::reproducirAudio,
+                    onGrabar = {
+                        val permisoConcedido = ContextCompat.checkSelfPermission(
+                            context, Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (permisoConcedido || estadoActual.grabando) {
+                            leccionViewModel.alternarGrabacion()
+                        } else {
+                            lanzadorPermisoAudio.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    },
+                    onReproducirMiGrabacion = leccionViewModel::reproducirMiGrabacion,
+                ),
             )
             is EstadoLeccion.Finalizada -> ResultadoLeccion(
                 correctas = estadoActual.correctas,
@@ -127,21 +147,29 @@ fun LeccionScreen(
     }
 }
 
+/**
+ * Agrupa todas las lambdas de interacción de una lección (seleccionar, escribir,
+ * grabar, etc.) en un solo objeto, para no tener que pasarlas una por una.
+ */
+private data class AccionesLeccion(
+    val onSeleccionarOpcion: (String) -> Unit,
+    val onActualizarTexto: (String) -> Unit,
+    val onAgregarElemento: (String) -> Unit,
+    val onQuitarUltimoElemento: () -> Unit,
+    val onSeleccionarElementoAsociar: (Int) -> Unit,
+    val onSeleccionarOpcionAsociar: (Int) -> Unit,
+    val onComprobar: () -> Unit,
+    val onContinuar: () -> Unit,
+    val onReproducirAudio: () -> Unit,
+    val onGrabar: () -> Unit,
+    val onReproducirMiGrabacion: () -> Unit,
+)
+
 @Composable
 private fun ContenidoLeccion(
     estado: EstadoLeccion.EnCurso,
     onSalir: () -> Unit,
-    onSeleccionarOpcion: (String) -> Unit,
-    onActualizarTexto: (String) -> Unit,
-    onAgregarElemento: (String) -> Unit,
-    onQuitarUltimoElemento: () -> Unit,
-    onSeleccionarElementoAsociar: (Int) -> Unit,
-    onSeleccionarOpcionAsociar: (Int) -> Unit,
-    onComprobar: () -> Unit,
-    onContinuar: () -> Unit,
-    onReproducirAudio: () -> Unit,
-    onGrabar: () -> Unit,
-    onReproducirMiGrabacion: () -> Unit,
+    acciones: AccionesLeccion,
     modifier: Modifier = Modifier,
 ) {
     val actividad = estado.actividadActual
@@ -173,29 +201,29 @@ private fun ContenidoLeccion(
                     actividad = actividad,
                     seleccionada = estado.respuestaSeleccionada,
                     verificada = estado.verificada,
-                    onSeleccionar = onSeleccionarOpcion,
+                    onSeleccionar = acciones.onSeleccionarOpcion,
                 )
                 TipoActividad.COMPLETAR -> TarjetaCompletar(
                     actividad = actividad,
                     texto = estado.textoIngresado,
                     verificada = estado.verificada,
-                    onCambiarTexto = onActualizarTexto,
+                    onCambiarTexto = acciones.onActualizarTexto,
                 )
                 TipoActividad.ORDENAR -> TarjetaOrdenar(
                     actividad = actividad,
                     ordenActual = estado.ordenActual,
                     elementosDisponibles = estado.elementosDisponibles,
                     verificada = estado.verificada,
-                    onAgregarElemento = onAgregarElemento,
-                    onQuitarUltimoElemento = onQuitarUltimoElemento,
+                    onAgregarElemento = acciones.onAgregarElemento,
+                    onQuitarUltimoElemento = acciones.onQuitarUltimoElemento,
                 )
                 TipoActividad.ASOCIAR -> TarjetaAsociar(
                     actividad = actividad,
                     indiceElementoSeleccionado = estado.indiceElementoSeleccionado,
                     pares = estado.pares,
                     verificada = estado.verificada,
-                    onSeleccionarElemento = onSeleccionarElementoAsociar,
-                    onSeleccionarOpcion = onSeleccionarOpcionAsociar,
+                    onSeleccionarElemento = acciones.onSeleccionarElementoAsociar,
+                    onSeleccionarOpcion = acciones.onSeleccionarOpcionAsociar,
                 )
                 TipoActividad.VOCABULARIO, TipoActividad.PRONUNCIACION -> TarjetaContenido(
                     actividad = actividad,
@@ -204,17 +232,17 @@ private fun ContenidoLeccion(
                     grabacionDisponible = estado.grabacionDisponible,
                     evaluando = estado.evaluandoPronunciacion,
                     errorEvaluacion = estado.errorEvaluacion,
-                    onReproducirAudio = onReproducirAudio,
-                    onGrabar = onGrabar,
-                    onReproducirMiGrabacion = onReproducirMiGrabacion,
+                    onReproducirAudio = acciones.onReproducirAudio,
+                    onGrabar = acciones.onGrabar,
+                    onReproducirMiGrabacion = acciones.onReproducirMiGrabacion,
                 )
                 TipoActividad.ESCUCHA -> TarjetaEscucha(
                     actividad = actividad,
                     seleccionada = estado.respuestaSeleccionada,
                     verificada = estado.verificada,
                     reproduciendoAudio = estado.reproduciendoAudio,
-                    onSeleccionar = onSeleccionarOpcion,
-                    onReproducirAudio = onReproducirAudio,
+                    onSeleccionar = acciones.onSeleccionarOpcion,
+                    onReproducirAudio = acciones.onReproducirAudio,
                 )
             }
         }
@@ -231,8 +259,8 @@ private fun ContenidoLeccion(
         BotonInferior(
             estado = estado,
             esContenido = esContenido,
-            onComprobar = onComprobar,
-            onContinuar = onContinuar,
+            onComprobar = acciones.onComprobar,
+            onContinuar = acciones.onContinuar,
         )
     }
 }

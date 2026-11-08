@@ -10,3 +10,15 @@ sealed class Recurso<out T> {
     data class Exito<T>(val datos: T) : Recurso<T>()
     data class Error(val mensaje: String) : Recurso<Nothing>()
 }
+
+/**
+ * Ejecuta [bloque] (por ejemplo, una consulta a Firestore) y envuelve el resultado
+ * en [Recurso.Exito]. Si falla, devuelve [Recurso.Error] con [mensajeError].
+ * Evita repetir el mismo try/catch en cada ViewModel que usa [Recurso].
+ */
+suspend fun <T> cargarComoRecurso(mensajeError: String, bloque: suspend () -> T): Recurso<T> =
+    try {
+        Recurso.Exito(bloque())
+    } catch (e: Exception) {
+        Recurso.Error(mensajeError)
+    }

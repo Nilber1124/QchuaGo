@@ -27,15 +27,12 @@ class DiccionarioViewModel(private val context: Context) : ViewModel() {
     fun cargar() {
         _estado.value = Recurso.Cargando
         viewModelScope.launch {
-            try {
-                val entradas = withContext(Dispatchers.IO) {
+            _estado.value = cargarComoRecurso("No se pudo cargar el diccionario.") {
+                withContext(Dispatchers.IO) {
                     context.assets.open(ARCHIVO_DICCIONARIO).bufferedReader(Charsets.UTF_8).useLines { lineas ->
                         lineas.drop(1).filter { it.isNotBlank() }.mapNotNull(::parsearLinea).toList()
                     }
                 }
-                _estado.value = Recurso.Exito(entradas)
-            } catch (e: Exception) {
-                _estado.value = Recurso.Error("No se pudo cargar el diccionario.")
             }
         }
     }

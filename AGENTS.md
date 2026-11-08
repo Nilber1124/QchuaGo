@@ -69,7 +69,7 @@ servicio intermedias.
 - **Modularidad:** Dividir los composables en funciones más pequeñas cuando un archivo o función sea demasiado grande.
 - **Reutilización:** Priorizar la creación de componentes reutilizables cuando exista repetición real de UI.
 - **Cargando / error:** Usar `PantallaCargando`, `PantallaError` o `ContenidoRecurso` de `ui/screens/ComponentesComunes.kt` en vez de copiar esos bloques.
-- **Pantallas sin `NavController`:** Las pantallas reciben lambdas (`onAbrirLeccion`, `onVolver`...). Solo `AppNavigation` y `HomeScreen` llaman a `navController`, usando las funciones de `Rutas` (ej. `Rutas.leccion(u, l)`).
+- **`NavController` directo:** Las pantallas reciben `navController: NavHostController` (o `NavController`) como parámetro y navegan por sí mismas con `navController.navigate(...)`/`popBackStack()`, usando las constantes/funciones de `Rutas` (ej. `Rutas.leccion(u, l)`). No se usan lambdas `onIrAX`/`onVolver`/`onAbrirX` para navegación — decisión explícita (8 de noviembre de 2026) para minimizar fricción al agregar pantallas/botones; no interesa mantener `@Preview` ni testing de UI con parámetros "puros". Ver `docs/PROJECT_STATUS.md`.
 - **Elevación de estado:** Mantener los estados con lógica de negocio o persistencia en el ViewModel.
 - **Lógica limpia:** Evitar cualquier tipo de lógica Firebase o de red dentro de funciones composables.
 
@@ -84,7 +84,8 @@ servicio intermedias.
 ## Navegación
 
 - Centralizar la configuración de rutas y el `NavHost` dentro de `ui/navigation/AppNavigation.kt`.
-- No instanciar objetos `NavController` independientes sin necesidad.
+- Un solo `NavHostController`, creado en `AppNavigation` y pasado como parámetro a cada pantalla (nunca una instancia nueva por pantalla).
+- Cada pantalla navega directamente con el `navController` que recibe; `AppNavigation.kt` solo registra rutas (`composable(Rutas.X) { PantallaX(navController, ...) }`), sin mapear lambdas de navegación por ruta.
 - Evitar la duplicación de rutas o constantes de navegación.
 
 ## Antes de implementar un requerimiento

@@ -56,9 +56,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.proyect.qchuago.data.entidad.Leccion
 import com.proyect.qchuago.data.entidad.Unidad
 import com.proyect.qchuago.data.entidad.Usuario
+import com.proyect.qchuago.ui.navigation.Rutas
 import com.proyect.qchuago.ui.theme.colorDesdeHex
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 import com.proyect.qchuago.ui.viewmodel.CursoViewModel
@@ -66,9 +68,8 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun InicioScreen(
+    navController: NavController,
     authViewModel: AuthViewModel,
-    onAbrirLeccion: (Unidad, Leccion) -> Unit,
-    onAbrirEvaluacion: (Unidad) -> Unit,
     cursoViewModel: CursoViewModel = viewModel(),
     modifier: Modifier = Modifier,
 ) {
@@ -144,7 +145,7 @@ fun InicioScreen(
                                 } == true,
                                 colorUnidad = colorDesdeHex(unidad.colorHex),
                                 onClick = {
-                                    onAbrirLeccion(unidad, leccion)
+                                    navController.navigate(Rutas.leccion(unidad.id, leccion.id))
                                 },
                             )
                         }
@@ -155,7 +156,7 @@ fun InicioScreen(
                             item(key = "evaluacion_${unidad.id}") {
                                 BotonEvaluacion(
                                     aprobada = unidad.id in evaluacionesAprobadasIds,
-                                    onClick = { onAbrirEvaluacion(unidad) },
+                                    onClick = { navController.navigate(Rutas.evaluacion(unidad.id)) },
                                 )
                             }
                         }

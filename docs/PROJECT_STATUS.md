@@ -1,6 +1,6 @@
 # Estado del proyecto QchuaGo
 
-Última actualización: 7 de noviembre de 2026.
+Última actualización: 8 de noviembre de 2026.
 
 ## Arquitectura y tecnología
 
@@ -20,6 +20,87 @@
 - No existe el concepto de "niveles" de dificultad (Básico/Intermedio/Avanzado): se
   eliminó por completo el 17 de octubre de 2026 (ver sección RF06 más abajo). El
   curso es únicamente `unidades` → `lecciones` → `actividades`.
+
+## Navegación con NavController directo (8 de noviembre de 2026, tarde)
+
+Decisión explícita del usuario: **se eliminó la regla que prohibía pasar
+`NavController` a las pantallas**. Antes, cada pantalla recibía lambdas de
+navegación (`onIrARegistro`, `onAbrirLeccion`, `onVolver`...) que `AppNavigation.kt`
+mapeaba una por una en cada bloque `composable(...)` — esto generaba "prop
+drilling" y obligaba a tocar 3 archivos (la pantalla origen, su firma, y
+`AppNavigation`) para agregar un solo botón de navegación nuevo. Se prioriza
+velocidad de desarrollo y simplicidad sobre `@Preview`/testing de UI con
+parámetros "puros" (que ya no se mantienen).
+
+- Todas las pantallas con navegación reciben ahora `navController: NavHostController`
+  (o `NavController` en `HomeScreen`/`InicioScreen`/`ProgresoScreen`, que ya lo usaban)
+  y navegan ellas mismas con `navController.navigate(Rutas.X)` /
+  `navController.popBackStack()`. Las que necesitan sesión también reciben
+  `authViewModel: AuthViewModel` directamente (en vez de que `AppNavigation` les
+  pase el dato ya extraído, ej. `uid`).
+- **`AppNavigation.kt`** quedó reducido a solo registrar rutas:
+  `composable(Rutas.X) { PantallaX(navController, authViewModel, ...) }`, sin
+  lambdas `onIrAX` construidas por ruta. Se eliminó el helper `irSinVolver` (solo
+  se usaba una vez, en el salto inicial de sesión).
+- **`LoginScreen.kt`/`RegisterScreen.kt`:** se fusionó el patrón de "función wrapper
+  + función pura" (existía solo para facilitar `@Preview`/testing, que ya no
+  interesa) en una sola función que recibe `navController` y `authViewModel`.
+- **`LeccionScreen.kt`:** ya no recibe `onSalir` ni `uid`; calcula `uid` leyendo
+  `authViewModel.usuario` y decide internamente a dónde salir (si viene de "Test
+  de nivel" —`actividadesEstaticas != null`— completa el onboarding y va a Home;
+  si es una lección real, actualiza el perfil si corresponde y hace
+  `popBackStack()`).
+- **`EvaluacionScreen.kt`:** ya no recibe `onResultadoGuardado`/`onVolver`/`uid`;
+  llama `authViewModel.actualizarPerfil()` directamente y usa `navController`.
+- **`BienvenidaScreen.kt`/`ElegirNivelScreen.kt`:** reciben `navController` +
+  `authViewModel` en vez de `usuario`/`onEmpezar`/`onPrincipiante`/`onTestNivel`.
+- **`InicioScreen.kt`/`ProgresoScreen.kt`:** reciben `navController` en vez de
+  `onAbrirLeccion`/`onAbrirEvaluacion`; navegan directo con `Rutas.leccion(...)`/
+  `Rutas.evaluacion(...)`. `HomeScreen.kt` ya no construye esas lambdas, solo
+  reenvía su propio `navController`.
+- `AGENTS.md` se actualizó: la regla "Pantallas sin NavController" se reemplazó
+  por "NavController directo" en la sección Jetpack Compose, y se agregó una nota
+  en la sección Navegación.
+- Verificado con `JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug`
+  (compila sin errores). No se probó en emulador/dispositivo real.
+
+## Auditoría de legibilidad: parámetros y Firebase (8 de noviembre de 2026)
+
+Revisión pedida explícitamente por el usuario: demasiados parámetros/lambdas en
+composables y conexión confusa con Firebase/ViewModels, siendo QchuaGo un trabajo
+de curso que debe ser simple y entendible, no "a prueba de todo". Sin cambios de
+funcionalidad ni de arquitectura (sigue siendo `ViewModel <-> Composable`).
+
+- **`LeccionScreen.kt`:** la función privada `ContenidoLeccion` tenía 13 parámetros
+  (11 lambdas `onX` sueltas) — el peor caso del proyecto. Se agruparon en una
+  `data class` privada `AccionesLeccion` (una sola instancia construida en
+  `LeccionScreen`); `ContenidoLeccion` pasó a 4 parámetros
+  (`estado`, `onSalir`, `acciones`, `modifier`). Ningún `TarjetaXxx` ni
+  `LeccionViewModel` cambiaron.
+- **`AuthViewModel.kt`:** era el único ViewModel que mezclaba `StateFlow` con
+  callbacks anidados (`actualizarNombre(nuevoNombre, onSuccess)` envolvía
+  `onSuccess` dentro de `onCompletado` de `actualizarUsuario`). Se agregó
+  `guardadoExitoso: StateFlow<Boolean>` (+ `limpiarGuardadoExitoso()`) y
+  `actualizarNombre`/`cambiarContrasena` perdieron su parámetro `onSuccess`,
+  quedando alineados al resto de ViewModels (100% `StateFlow`, ninguna función
+  pública recibe una lambda). `PerfilScreen.kt` observa `guardadoExitoso` con
+  `collectAsState()` y un `LaunchedEffect` que cierra el diálogo abierto; sus
+  parámetros `onActualizarNombre`/`onCambiarContrasena` pasaron de
+  `(String, () -> Unit) -> Unit` a `(String) -> Unit` (y similar).
+- **`Recurso.kt`:** nueva función `cargarComoRecurso(mensajeError) { bloque }` que
+  envuelve el `try { Recurso.Exito(...) } catch { Recurso.Error(mensaje) }`
+  repetido en `CursoViewModel.cargarCurso()`, `DiccionarioViewModel.cargar()` y
+  `RankingViewModel.cargarRanking()` (las 3 usan `Recurso<T>`). No se tocó
+  `LeccionViewModel`/`EvaluacionViewModel` (usan sus propias máquinas de estado,
+  no `Recurso<T>`).
+- **`UsuarioRanking`** se movió de `RankingViewModel.kt` a
+  `data/entidad/UsuarioRanking.kt`, igual que el resto de modelos de dominio
+  (`Usuario`, `Actividad`, `Unidad`, `Leccion`, `EntradaDiccionario`).
+  `ProgresoScreen.kt` ahora lo importa desde `data.entidad` en vez de
+  `ui.viewmodel`.
+- Verificado con `JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug`
+  (compila sin errores). No se probó en emulador/dispositivo real por no haber
+  ninguno disponible en la sesión.
 
 ## Eliminación de la capa Service (26 de octubre de 2026)
 
@@ -442,3 +523,11 @@ servicio → Generar nueva clave privada), nunca comiteado (ya está en `.gitign
   pronunciación por similitud acústica (MFCC+DTW). Las pruebas unitarias (`SimilitudAudioTest`,
   con tonos sintéticos) validan la matemática; **no se probó con voz real en un dispositivo** ni
   se calibró el umbral de aprobación, por no haber ninguno disponible en la sesión.
+- `JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug`: compilación correcta el 8 de
+  noviembre de 2026 tras la auditoría de legibilidad de parámetros/Firebase (`AccionesLeccion`,
+  `AuthViewModel` sin callbacks anidados, `cargarComoRecurso`, `UsuarioRanking` reubicado).
+  Tampoco se probó en emulador/dispositivo real.
+- `JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug`: compilación correcta el 8 de
+  noviembre de 2026 (tarde) tras pasar `NavController` directo a todas las pantallas con
+  navegación, eliminando las lambdas `onIrAX`/`onVolver`/`onAbrirX`. Tampoco se probó en
+  emulador/dispositivo real.

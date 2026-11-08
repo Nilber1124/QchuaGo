@@ -20,16 +20,21 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.proyect.qchuago.data.entidad.Usuario
+import androidx.navigation.NavHostController
+import com.proyect.qchuago.ui.navigation.Rutas
+import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 
 @Composable
 fun BienvenidaScreen(
-    usuario: Usuario?,
-    onEmpezar: () -> Unit,
+    navController: NavHostController,
+    authViewModel: AuthViewModel,
     modifier: Modifier = Modifier,
 ) {
+    val usuario by authViewModel.usuario.collectAsState()
     val nombre = usuario?.nombre?.takeIf { it.isNotBlank() } ?: "amigo"
 
     Column(
@@ -71,7 +76,11 @@ fun BienvenidaScreen(
         )
         Spacer(modifier = Modifier.height(32.dp))
         Button(
-            onClick = onEmpezar,
+            onClick = {
+                navController.navigate(Rutas.ELEGIR_NIVEL) {
+                    popUpTo(Rutas.BIENVENIDA) { inclusive = true }
+                }
+            },
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             modifier = Modifier
                 .fillMaxWidth()

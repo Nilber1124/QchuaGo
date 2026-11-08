@@ -29,31 +29,34 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.navigation.NavHostController
 import com.proyect.qchuago.ui.screens.leccion.BarraProgresoLeccion
 import com.proyect.qchuago.ui.screens.leccion.TarjetaSeleccion
+import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 import com.proyect.qchuago.ui.viewmodel.EstadoEvaluacion
 import com.proyect.qchuago.ui.viewmodel.EvaluacionViewModel
 
 @Composable
 fun EvaluacionScreen(
+    navController: NavHostController,
+    authViewModel: AuthViewModel,
     unidadId: String,
-    uid: String?,
-    onResultadoGuardado: () -> Unit,
-    onVolver: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val usuario by authViewModel.usuario.collectAsState()
     val evaluacionViewModel: EvaluacionViewModel = viewModel(
         key = "evaluacion/$unidadId",
         factory = viewModelFactory {
-            initializer { EvaluacionViewModel(unidadId, uid) }
+            initializer { EvaluacionViewModel(unidadId, usuario?.uid) }
         },
     )
     val estado by evaluacionViewModel.estado.collectAsState()
+    val onVolver: () -> Unit = { navController.popBackStack() }
 
     LaunchedEffect(estado) {
         val resultado = estado as? EstadoEvaluacion.Resultado
         if (resultado != null && !resultado.guardando && resultado.error == null) {
-            onResultadoGuardado()
+            authViewModel.actualizarPerfil()
         }
     }
 

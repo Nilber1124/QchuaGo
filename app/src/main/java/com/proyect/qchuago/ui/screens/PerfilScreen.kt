@@ -40,6 +40,7 @@ fun PerfilScreen(
     val usuario by authViewModel.usuario.collectAsState()
     val error by authViewModel.error.collectAsState()
     val temaOscuro by authViewModel.temaOscuro.collectAsState()
+    val guardadoExitoso by authViewModel.guardadoExitoso.collectAsState()
     // Se observa el curso para que el resumen se recalcule cuando termine de cargar.
     val estadoCurso by cursoViewModel.estadoCurso.collectAsState()
     val resumen = cursoViewModel.resumen(
@@ -51,11 +52,13 @@ fun PerfilScreen(
         usuario = usuario,
         error = error,
         temaOscuro = temaOscuro,
+        guardadoExitoso = guardadoExitoso,
         leccionesCompletadas = resumen.leccionesCompletadas,
         totalLecciones = resumen.totalLecciones,
         onCambiarTema = authViewModel::cambiarTema,
         onActualizarNombre = authViewModel::actualizarNombre,
         onCambiarContrasena = authViewModel::cambiarContrasena,
+        onGuardadoExitosoConsumido = authViewModel::limpiarGuardadoExitoso,
         onCerrarSesion = authViewModel::cerrarSesion,
         modifier = modifier,
     )
@@ -66,11 +69,13 @@ fun PerfilScreen(
     usuario: Usuario?,
     error: String?,
     temaOscuro: Boolean,
+    guardadoExitoso: Boolean,
     leccionesCompletadas: Int,
     totalLecciones: Int,
     onCambiarTema: (Boolean) -> Unit,
-    onActualizarNombre: (String, () -> Unit) -> Unit,
-    onCambiarContrasena: (String, String, () -> Unit) -> Unit,
+    onActualizarNombre: (String) -> Unit,
+    onCambiarContrasena: (String, String) -> Unit,
+    onGuardadoExitosoConsumido: () -> Unit,
     onCerrarSesion: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -87,6 +92,17 @@ fun PerfilScreen(
     // Calculamos el porcentaje de avance una sola vez, con el progreso real del curso.
     val progreso = if (totalLecciones > 0) leccionesCompletadas.toFloat() / totalLecciones else 0f
     val porcentaje = (progreso * 100).toInt()
+
+    // Cuando el ViewModel confirma que guardó el cambio, cerramos el diálogo que esté abierto.
+    LaunchedEffect(guardadoExitoso) {
+        if (guardadoExitoso) {
+            mostrarEditarPerfil = false
+            mostrarCambiarContrasena = false
+            nuevaContrasena = ""
+            confirmarContrasena = ""
+            onGuardadoExitosoConsumido()
+        }
+    }
 
     Column(
         modifier = modifier
@@ -156,9 +172,7 @@ fun PerfilScreen(
             nombre = nuevoNombre,
             error = error,
             onNombreChange = { nuevoNombre = it },
-            onGuardar = {
-                onActualizarNombre(nuevoNombre) { mostrarEditarPerfil = false }
-            },
+            onGuardar = { onActualizarNombre(nuevoNombre) },
             onCancelar = { mostrarEditarPerfil = false }
         )
     }
@@ -170,13 +184,7 @@ fun PerfilScreen(
             error = error,
             onNuevaChange = { nuevaContrasena = it },
             onConfirmarChange = { confirmarContrasena = it },
-            onGuardar = {
-                onCambiarContrasena(nuevaContrasena, confirmarContrasena) {
-                    mostrarCambiarContrasena = false
-                    nuevaContrasena = ""
-                    confirmarContrasena = ""
-                }
-            },
+            onGuardar = { onCambiarContrasena(nuevaContrasena, confirmarContrasena) },
             onCancelar = {
                 mostrarCambiarContrasena = false
                 nuevaContrasena = ""

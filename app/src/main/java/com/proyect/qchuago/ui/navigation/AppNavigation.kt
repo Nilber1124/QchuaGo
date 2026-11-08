@@ -61,6 +61,11 @@ object Rutas {
         if (usuario.onboardingCompletado) HOME else BIENVENIDA
 }
 
+/**
+ * Contenedor de navegación. Las pantallas reciben [navController] directamente y
+ * navegan por sí mismas (`navController.navigate(...)`/`popBackStack()`); aquí solo
+ * se registran las rutas, sin mapear lambdas `onIrAX` para cada una.
+ */
 @Composable
 fun AppNavigation(
     navController: NavHostController = rememberNavController(),
@@ -70,17 +75,13 @@ fun AppNavigation(
     val sesionInicializada by authViewModel.sesionInicializada.collectAsState()
     val usuario by authViewModel.usuario.collectAsState()
 
-    /** Va a [ruta] borrando todo el historial (el botón "atrás" no vuelve). */
-    fun irSinVolver(ruta: String) {
-        navController.navigate(ruta) {
-            popUpTo(navController.graph.id) { inclusive = true }
-        }
-    }
-
     // Cuando se comprueba la sesión al arrancar, salta a Login, Bienvenida o Home.
     LaunchedEffect(sesionInicializada) {
         if (sesionInicializada) {
-            irSinVolver(usuario?.let { Rutas.destinoTrasAutenticar(it) } ?: Rutas.LOGIN)
+            val destino = usuario?.let { Rutas.destinoTrasAutenticar(it) } ?: Rutas.LOGIN
+            navController.navigate(destino) {
+                popUpTo(navController.graph.id) { inclusive = true }
+            }
         }
     }
 
@@ -90,57 +91,20 @@ fun AppNavigation(
         modifier = modifier,
     ) {
         composable(Rutas.SPLASH) { PantallaCargaInicial() }
-        composable(Rutas.LOGIN) {
-            LoginScreen(
-                authViewModel = authViewModel,
-                onAutenticado = { irSinVolver(Rutas.destinoTrasAutenticar(it)) },
-                onIrARegistro = { navController.navigate(Rutas.REGISTRO) },
-            )
-        }
-        composable(Rutas.REGISTRO) {
-            RegisterScreen(
-                authViewModel = authViewModel,
-                onAutenticado = { irSinVolver(Rutas.destinoTrasAutenticar(it)) },
-                onVolver = { navController.popBackStack() },
-            )
-        }
-        composable(Rutas.BIENVENIDA) {
-            val usuarioActual by authViewModel.usuario.collectAsState()
-            BienvenidaScreen(
-                usuario = usuarioActual,
-                onEmpezar = {
-                    navController.navigate(Rutas.ELEGIR_NIVEL) {
-                        popUpTo(Rutas.BIENVENIDA) { inclusive = true }
-                    }
-                },
-            )
-        }
-        composable(Rutas.ELEGIR_NIVEL) {
-            ElegirNivelScreen(
-                onPrincipiante = {
-                    authViewModel.completarOnboarding()
-                    irSinVolver(Rutas.HOME)
-                },
-                onTestNivel = { navController.navigate(Rutas.PRUEBA_NIVEL) },
-            )
-        }
+        composable(Rutas.LOGIN) { LoginScreen(navController, authViewModel) }
+        composable(Rutas.REGISTRO) { RegisterScreen(navController, authViewModel) }
+        composable(Rutas.BIENVENIDA) { BienvenidaScreen(navController, authViewModel) }
+        composable(Rutas.ELEGIR_NIVEL) { ElegirNivelScreen(navController, authViewModel) }
         composable(Rutas.PRUEBA_NIVEL) {
             LeccionScreen(
+                navController = navController,
+                authViewModel = authViewModel,
                 unidadId = "prueba-nivel",
                 leccionId = "demo",
                 actividadesEstaticas = ActividadesPruebaNivel.lista,
-                onSalir = { _ ->
-                    authViewModel.completarOnboarding()
-                    irSinVolver(Rutas.HOME)
-                },
             )
         }
-        composable(Rutas.HOME) {
-            HomeScreen(
-                navController = navController,
-                authViewModel = authViewModel,
-            )
-        }
+        composable(Rutas.HOME) { HomeScreen(navController, authViewModel) }
         composable(
             route = Rutas.LECCION_PATRON,
             arguments = listOf(
@@ -150,27 +114,14 @@ fun AppNavigation(
         ) { backStackEntry ->
             val unidadId = backStackEntry.arguments?.getString("unidadId") ?: return@composable
             val leccionId = backStackEntry.arguments?.getString("leccionId") ?: return@composable
-            LeccionScreen(
-                unidadId = unidadId,
-                leccionId = leccionId,
-                uid = usuario?.uid,
-                onSalir = { completada ->
-                    if (completada) authViewModel.actualizarPerfil()
-                    navController.popBackStack()
-                },
-            )
+            LeccionScreen(navController, authViewModel, unidadId, leccionId)
         }
         composable(
             route = Rutas.EVALUACION_PATRON,
             arguments = listOf(navArgument("unidadId") { type = NavType.StringType }),
         ) { backStackEntry ->
             val unidadId = backStackEntry.arguments?.getString("unidadId") ?: return@composable
-            EvaluacionScreen(
-                unidadId = unidadId,
-                uid = usuario?.uid,
-                onResultadoGuardado = authViewModel::actualizarPerfil,
-                onVolver = { navController.popBackStack() },
-            )
+            EvaluacionScreen(navController, authViewModel, unidadId)
         }
     }
 }

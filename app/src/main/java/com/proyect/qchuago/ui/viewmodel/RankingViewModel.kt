@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.proyect.qchuago.data.entidad.UsuarioRanking
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,16 +14,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.WeekFields
 import java.util.Locale
-
-/**
- * Datos de un usuario en el ranking semanal.
- */
-data class UsuarioRanking(
-    val uid: String = "",
-    val nombre: String = "",
-    val xpSemanal: Int = 0,
-    val posicion: Int = 0,
-)
 
 /**
  * ViewModel para el ranking semanal (RF20).
@@ -46,7 +37,7 @@ class RankingViewModel : ViewModel() {
         _ranking.value = Recurso.Cargando
         _miRankingFueraDeTop.value = null
         viewModelScope.launch {
-            try {
+            _ranking.value = cargarComoRecurso("No se pudo cargar el ranking. Inténtalo nuevamente.") {
                 val semanaId = obtenerSemanaActual()
 
                 val snapshot = firestore.collection("rankingsSemanales")
@@ -63,8 +54,6 @@ class RankingViewModel : ViewModel() {
                     val xp = doc.getLong("xpSemanal")?.toInt() ?: 0
                     UsuarioRanking(uid = uid, nombre = nombre, xpSemanal = xp, posicion = index + 1)
                 }
-
-                _ranking.value = Recurso.Exito(lista)
 
                 if (uidUsuarioActual != null && lista.none { it.uid == uidUsuarioActual }) {
                     val miDoc = firestore.collection("rankingsSemanales")
@@ -94,10 +83,8 @@ class RankingViewModel : ViewModel() {
                         )
                     }
                 }
-            } catch (e: Exception) {
-                _ranking.value = Recurso.Error(
-                    "No se pudo cargar el ranking. Inténtalo nuevamente."
-                )
+
+                lista
             }
         }
     }

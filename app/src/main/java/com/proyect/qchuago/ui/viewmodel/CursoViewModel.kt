@@ -50,7 +50,7 @@ class CursoViewModel : ViewModel() {
     fun cargarCurso() {
         _estadoCurso.value = Recurso.Cargando
         viewModelScope.launch {
-            try {
+            _estadoCurso.value = cargarComoRecurso("No se pudieron cargar las unidades. Inténtalo nuevamente.") {
                 // 1) Todas las unidades, ordenadas por "orden".
                 val documentosUnidades = unidadesCollection
                     .orderBy("orden", Query.Direction.ASCENDING)
@@ -58,7 +58,7 @@ class CursoViewModel : ViewModel() {
                     .documents
 
                 // 2) Para cada unidad, su subcolección "lecciones" (también ordenada).
-                val unidades = documentosUnidades.map { documento ->
+                documentosUnidades.map { documento ->
                     val unidad = documento.toObject(Unidad::class.java) ?: Unidad(id = documento.id)
                     val lecciones = documento.reference.collection("lecciones")
                         .orderBy("orden", Query.Direction.ASCENDING)
@@ -66,11 +66,6 @@ class CursoViewModel : ViewModel() {
                         .toObjects(Leccion::class.java)
                     unidad.copy(lecciones = lecciones)
                 }
-                _estadoCurso.value = Recurso.Exito(unidades)
-            } catch (e: Exception) {
-                _estadoCurso.value = Recurso.Error(
-                    "No se pudieron cargar las unidades. Inténtalo nuevamente."
-                )
             }
         }
     }

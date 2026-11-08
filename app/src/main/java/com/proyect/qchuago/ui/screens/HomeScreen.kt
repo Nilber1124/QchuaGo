@@ -36,8 +36,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.proyect.qchuago.R
-import com.proyect.qchuago.data.entidad.Leccion
-import com.proyect.qchuago.data.entidad.Unidad
 import com.proyect.qchuago.ui.navigation.Rutas
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 import com.proyect.qchuago.ui.viewmodel.CursoViewModel
@@ -63,12 +61,6 @@ fun HomeScreen(
     var selectedTab by rememberSaveable { mutableStateOf(NavTab.INICIO) }
     // Instancia única compartida por las 3 pestañas, para no repetir la carga del curso.
     val cursoViewModel: CursoViewModel = viewModel()
-    val abrirLeccion: (Unidad, Leccion) -> Unit = { unidad, leccion ->
-        navController.navigate(Rutas.leccion(unidad.id, leccion.id))
-    }
-    val abrirEvaluacion: (Unidad) -> Unit = { unidad ->
-        navController.navigate(Rutas.evaluacion(unidad.id))
-    }
 
     LaunchedEffect(usuario) {
         if (usuario == null) {
@@ -94,16 +86,14 @@ fun HomeScreen(
         ) {
             when (selectedTab) {
                 NavTab.INICIO -> InicioScreen(
+                    navController = navController,
                     authViewModel = authViewModel,
                     cursoViewModel = cursoViewModel,
-                    onAbrirLeccion = abrirLeccion,
-                    onAbrirEvaluacion = abrirEvaluacion,
                 )
                 NavTab.PROGRESO -> ProgresoScreen(
+                    navController = navController,
                     authViewModel = authViewModel,
                     cursoViewModel = cursoViewModel,
-                    onAbrirLeccion = abrirLeccion,
-                    onAbrirEvaluacion = abrirEvaluacion,
                 )
                 NavTab.DICCIONARIO -> DiccionarioScreen()
                 NavTab.REPASO -> RepasoScreen()

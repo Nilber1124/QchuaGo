@@ -39,14 +39,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.proyect.qchuago.data.entidad.Leccion
 import com.proyect.qchuago.data.entidad.Unidad
+import com.proyect.qchuago.data.entidad.UsuarioRanking
+import com.proyect.qchuago.ui.navigation.Rutas
 import com.proyect.qchuago.ui.theme.colorDesdeHex
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
 import com.proyect.qchuago.ui.viewmodel.CursoViewModel
 import com.proyect.qchuago.ui.viewmodel.RankingViewModel
 import com.proyect.qchuago.ui.viewmodel.Recurso
-import com.proyect.qchuago.ui.viewmodel.UsuarioRanking
 
 /**
  * Recibe el mismo [CursoViewModel] creado una sola vez en `HomeScreen` y compartido
@@ -57,9 +59,8 @@ import com.proyect.qchuago.ui.viewmodel.UsuarioRanking
  */
 @Composable
 fun ProgresoScreen(
+    navController: NavController,
     authViewModel: AuthViewModel,
-    onAbrirLeccion: (Unidad, Leccion) -> Unit,
-    onAbrirEvaluacion: (Unidad) -> Unit,
     cursoViewModel: CursoViewModel = viewModel(),
     rankingViewModel: RankingViewModel = viewModel(),
     modifier: Modifier = Modifier,
@@ -116,8 +117,12 @@ fun ProgresoScreen(
                 TarjetaContinuar(
                     siguiente = resumen.siguienteLeccion,
                     siguienteEvaluacion = resumen.siguienteEvaluacion,
-                    onContinuar = { (unidad, leccion) -> onAbrirLeccion(unidad, leccion) },
-                    onAbrirEvaluacion = onAbrirEvaluacion,
+                    onContinuar = { (unidad, leccion) ->
+                        navController.navigate(Rutas.leccion(unidad.id, leccion.id))
+                    },
+                    onAbrirEvaluacion = { unidad ->
+                        navController.navigate(Rutas.evaluacion(unidad.id))
+                    },
                 )
                 Spacer(Modifier.height(20.dp))
             }
