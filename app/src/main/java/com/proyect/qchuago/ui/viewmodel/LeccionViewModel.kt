@@ -1,6 +1,9 @@
 package com.proyect.qchuago.ui.viewmodel
 
 import android.content.Context
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Build
@@ -12,21 +15,28 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.proyect.qchuago.data.entidad.Actividad
 import com.proyect.qchuago.data.entidad.TipoActividad
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.WeekFields
+import kotlin.math.roundToInt
 
 private val TIPOS_EVALUABLES = setOf(
     TipoActividad.SELECCION,
     TipoActividad.COMPLETAR,
     TipoActividad.ORDENAR,
     TipoActividad.ASOCIAR,
+    TipoActividad.ESCUCHA,
+    TipoActividad.PRONUNCIACION,
 )
 
 sealed class EstadoLeccion {
@@ -48,6 +58,9 @@ sealed class EstadoLeccion {
         val reproduciendoAudio: Boolean = false,
         val grabando: Boolean = false,
         val grabacionDisponible: Boolean = false,
+        val evaluandoPronunciacion: Boolean = false,
+        val similitudPronunciacion: Int? = null,
+        val errorEvaluacion: String? = null,
     ) : EstadoLeccion() {
         val actividadActual: Actividad get() = actividades[indice]
         val esUltima: Boolean get() = indice == actividades.lastIndex
@@ -65,7 +78,9 @@ sealed class EstadoLeccion {
  * Coordina una lección: carga sus actividades desde Firestore (o usa actividades
  * estáticas para la prueba de nivel), lleva el estado de cada ejercicio, y maneja
  * la reproducción/grabación de audio de las actividades de tipo
- * VOCABULARIO/PRONUNCIACION (práctica local, no evaluable, no sube nada a Firebase).
+ * VOCABULARIO/PRONUNCIACION. VOCABULARIO es solo práctica (no evaluable); en
+ * PRONUNCIACION, además, se califica la grabación por similitud acústica contra
+ * el audio de referencia (ver [evaluarPronunciacion] y `SimilitudAudio.kt`).
  */
 class LeccionViewModel(
     private val unidadId: String,
@@ -198,8 +213,13 @@ class LeccionViewModel(
 
     fun comprobar() {
         val estado = enCursoActual() ?: return
-        if (estado.verificada) return
+        if (estado.verificada || estado.evaluandoPronunciacion) return
         val actividad = estado.actividadActual
+
+        if (actividad.tipo == TipoActividad.PRONUNCIACION) {
+            evaluarPronunciacion(actividad)
+            return
+        }
 
         val esCorrecta = when (actividad.tipo) {
             TipoActividad.SELECCION -> estado.respuestaSeleccionada == actividad.respuestaCorrecta
@@ -209,6 +229,7 @@ class LeccionViewModel(
             TipoActividad.ASOCIAR -> actividad.elementos.indices.map { i ->
                 estado.pares[i]?.let { actividad.opciones.getOrNull(it) }
             } == actividad.respuestasCorrectas
+            TipoActividad.ESCUCHA -> estado.respuestaSeleccionada == actividad.respuestaCorrecta
             TipoActividad.VOCABULARIO, TipoActividad.PRONUNCIACION -> return
         }
 
@@ -221,6 +242,51 @@ class LeccionViewModel(
         respuestasComprobadas[actividad.id] = esCorrecta
 
         registrarRespuestaSiCorresponde(actividad, esCorrecta)
+    }
+
+    /**
+     * Califica PRONUNCIACION por similitud acústica (MFCC + DTW, ver
+     * [com.proyect.qchuago.ui.viewmodel] `SimilitudAudio.kt`) contra el audio de
+     * referencia de la actividad — no es reconocimiento de voz, solo "qué tan
+     * parecido suena" la grabación del usuario. Corre fuera del hilo principal
+     * porque decodificar y comparar audio no es instantáneo.
+     */
+    private fun evaluarPronunciacion(actividad: Actividad) {
+        val estadoInicial = enCursoActual() ?: return
+        _estadoLeccion.value = estadoInicial.copy(evaluandoPronunciacion = true, errorEvaluacion = null)
+
+        viewModelScope.launch(Dispatchers.Default) {
+            val pcmUsuario = decodificarArchivoAPcm(archivoGrabacion.absolutePath)
+            val pcmReferencia = decodificarReferenciaAPcm(actividad)
+
+            if (pcmUsuario == null || pcmReferencia == null) {
+                val estadoActual = enCursoActual() ?: return@launch
+                _estadoLeccion.value = estadoActual.copy(
+                    evaluandoPronunciacion = false,
+                    errorEvaluacion = "No se pudo evaluar la grabación. Inténtalo de nuevo.",
+                )
+                return@launch
+            }
+
+            val similitud = calcularSimilitud(
+                pcmUsuario = pcmUsuario.muestras,
+                tasaUsuario = pcmUsuario.tasaMuestreo,
+                pcmReferencia = pcmReferencia.muestras,
+                tasaReferencia = pcmReferencia.tasaMuestreo,
+            )
+            val esCorrecta = similitud >= UMBRAL_SIMILITUD_PRONUNCIACION
+
+            val estadoFinal = enCursoActual() ?: return@launch
+            _estadoLeccion.value = estadoFinal.copy(
+                verificada = true,
+                esCorrecta = esCorrecta,
+                evaluandoPronunciacion = false,
+                similitudPronunciacion = similitud.roundToInt(),
+                correctas = if (esCorrecta) estadoFinal.correctas + 1 else estadoFinal.correctas,
+            )
+            respuestasComprobadas[actividad.id] = esCorrecta
+            registrarRespuestaSiCorresponde(actividad, esCorrecta)
+        }
     }
 
     /**
@@ -264,6 +330,9 @@ class LeccionViewModel(
             verificada = false,
             esCorrecta = null,
             grabacionDisponible = false,
+            evaluandoPronunciacion = false,
+            similitudPronunciacion = null,
+            errorEvaluacion = null,
         )
     }
 
@@ -498,6 +567,118 @@ class LeccionViewModel(
 
     private fun hayGrabacionDisponible(): Boolean = archivoGrabacion.exists()
 
+    private data class AudioPcm(val muestras: ShortArray, val tasaMuestreo: Int)
+
+    private fun decodificarArchivoAPcm(rutaArchivo: String): AudioPcm? =
+        decodificarAPcm { MediaExtractor().apply { setDataSource(rutaArchivo) } }
+
+    /** Resuelve [Actividad.audioLocal] (recurso `raw`) o [Actividad.audioUrl], igual que [reproducir]. */
+    private fun decodificarReferenciaAPcm(actividad: Actividad): AudioPcm? {
+        val idRecurso = if (actividad.audioLocal.isNotBlank()) {
+            context.resources.getIdentifier(actividad.audioLocal, "raw", context.packageName)
+        } else 0
+        return when {
+            idRecurso != 0 -> decodificarAPcm {
+                MediaExtractor().apply { setDataSource(context.resources.openRawResourceFd(idRecurso)) }
+            }
+            actividad.audioUrl.isNotBlank() -> decodificarAPcm {
+                MediaExtractor().apply { setDataSource(actividad.audioUrl, emptyMap()) }
+            }
+            else -> null
+        }
+    }
+
+    /**
+     * Decodifica la primera pista de audio que entregue [crearExtractor] a PCM de
+     * 16 bits (mono, mezclando a mono si viene estéreo), usando [MediaExtractor] +
+     * [MediaCodec] (SDK de Android, sin dependencias nuevas). `null` si falla.
+     */
+    private fun decodificarAPcm(crearExtractor: () -> MediaExtractor): AudioPcm? {
+        val extractor = try {
+            crearExtractor()
+        } catch (e: Exception) {
+            return null
+        }
+        return try {
+            var formato: MediaFormat? = null
+            for (i in 0 until extractor.trackCount) {
+                val candidato = extractor.getTrackFormat(i)
+                if (candidato.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true) {
+                    extractor.selectTrack(i)
+                    formato = candidato
+                    break
+                }
+            }
+            val mime = formato?.getString(MediaFormat.KEY_MIME) ?: return null
+            val tasaMuestreo = formato.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            val canales = formato.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+
+            val decodificador = MediaCodec.createDecoderByType(mime)
+            decodificador.configure(formato, null, null, 0)
+            decodificador.start()
+
+            val salida = ByteArrayOutputStream()
+            val buferInfo = MediaCodec.BufferInfo()
+            var entradaTerminada = false
+            var salidaTerminada = false
+
+            try {
+                while (!salidaTerminada) {
+                    if (!entradaTerminada) {
+                        val indiceEntrada = decodificador.dequeueInputBuffer(10_000)
+                        if (indiceEntrada >= 0) {
+                            val buferEntrada = decodificador.getInputBuffer(indiceEntrada)!!
+                            val tamanoLeido = extractor.readSampleData(buferEntrada, 0)
+                            if (tamanoLeido < 0) {
+                                decodificador.queueInputBuffer(
+                                    indiceEntrada, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                                )
+                                entradaTerminada = true
+                            } else {
+                                decodificador.queueInputBuffer(indiceEntrada, 0, tamanoLeido, extractor.sampleTime, 0)
+                                extractor.advance()
+                            }
+                        }
+                    }
+
+                    val indiceSalida = decodificador.dequeueOutputBuffer(buferInfo, 10_000)
+                    if (indiceSalida >= 0) {
+                        if (buferInfo.size > 0) {
+                            val buferSalida = decodificador.getOutputBuffer(indiceSalida)!!
+                            val datos = ByteArray(buferInfo.size)
+                            buferSalida.position(buferInfo.offset)
+                            buferSalida.get(datos)
+                            salida.write(datos)
+                        }
+                        decodificador.releaseOutputBuffer(indiceSalida, false)
+                        if (buferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                            salidaTerminada = true
+                        }
+                    }
+                }
+            } finally {
+                decodificador.stop()
+                decodificador.release()
+            }
+
+            val bytes = salida.toByteArray()
+            val bufferMuestras = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+            val entrelazadas = ShortArray(bufferMuestras.remaining())
+            bufferMuestras.get(entrelazadas)
+            val muestras = if (canales == 2) mezclarAMono(entrelazadas) else entrelazadas
+            AudioPcm(muestras, tasaMuestreo)
+        } catch (e: Exception) {
+            null
+        } finally {
+            extractor.release()
+        }
+    }
+
+    private fun mezclarAMono(entrelazadas: ShortArray): ShortArray =
+        ShortArray(entrelazadas.size / 2) { i ->
+            ((entrelazadas[2 * i].toInt() + entrelazadas[2 * i + 1].toInt()) / 2).toShort()
+        }
+
     private fun reproducirGrabacion(alTerminar: () -> Unit): Boolean {
         if (!hayGrabacionDisponible()) return false
         liberarReproductor()
@@ -555,6 +736,9 @@ class LeccionViewModel(
                 verificada = false,
                 esCorrecta = null,
                 grabacionDisponible = false,
+                evaluandoPronunciacion = false,
+                similitudPronunciacion = null,
+                errorEvaluacion = null,
             )
         }
     }
@@ -562,6 +746,12 @@ class LeccionViewModel(
 
 private const val XP_RESPUESTA_CORRECTA = 5
 private const val XP_LECCION_COMPLETADA = 20
+
+/**
+ * Similitud mínima (0-100, ver [calcularSimilitud]) para aprobar PRONUNCIACION.
+ * Valor de partida sin calibrar con voz real — ajustar al probar en un dispositivo.
+ */
+private const val UMBRAL_SIMILITUD_PRONUNCIACION = 55f
 private val ZONA_HORARIA_LIMA = ZoneId.of("America/Lima")
 
 private fun calcularRacha(rachaActual: Int, ultimaFecha: String, hoy: LocalDate): Int {

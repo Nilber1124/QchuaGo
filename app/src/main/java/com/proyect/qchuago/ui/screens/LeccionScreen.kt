@@ -37,12 +37,13 @@ import com.proyect.qchuago.ui.screens.leccion.ResultadoLeccion
 import com.proyect.qchuago.ui.screens.leccion.TarjetaAsociar
 import com.proyect.qchuago.ui.screens.leccion.TarjetaCompletar
 import com.proyect.qchuago.ui.screens.leccion.TarjetaContenido
+import com.proyect.qchuago.ui.screens.leccion.TarjetaEscucha
 import com.proyect.qchuago.ui.screens.leccion.TarjetaOrdenar
 import com.proyect.qchuago.ui.screens.leccion.TarjetaSeleccion
 import com.proyect.qchuago.ui.viewmodel.EstadoLeccion
 import com.proyect.qchuago.ui.viewmodel.LeccionViewModel
 
-private val TIPOS_CONTENIDO = setOf(TipoActividad.VOCABULARIO, TipoActividad.PRONUNCIACION)
+private val TIPOS_CONTENIDO = setOf(TipoActividad.VOCABULARIO)
 
 @Composable
 fun LeccionScreen(
@@ -201,15 +202,29 @@ private fun ContenidoLeccion(
                     reproduciendoAudio = estado.reproduciendoAudio,
                     grabando = estado.grabando,
                     grabacionDisponible = estado.grabacionDisponible,
+                    evaluando = estado.evaluandoPronunciacion,
+                    errorEvaluacion = estado.errorEvaluacion,
                     onReproducirAudio = onReproducirAudio,
                     onGrabar = onGrabar,
                     onReproducirMiGrabacion = onReproducirMiGrabacion,
+                )
+                TipoActividad.ESCUCHA -> TarjetaEscucha(
+                    actividad = actividad,
+                    seleccionada = estado.respuestaSeleccionada,
+                    verificada = estado.verificada,
+                    reproduciendoAudio = estado.reproduciendoAudio,
+                    onSeleccionar = onSeleccionarOpcion,
+                    onReproducirAudio = onReproducirAudio,
                 )
             }
         }
 
         if (estado.verificada) {
-            PanelRetroalimentacion(actividad = actividad, esCorrecta = estado.esCorrecta == true)
+            PanelRetroalimentacion(
+                actividad = actividad,
+                esCorrecta = estado.esCorrecta == true,
+                similitudPronunciacion = estado.similitudPronunciacion,
+            )
             Spacer(Modifier.height(12.dp))
         }
 

@@ -10,6 +10,7 @@ enum class TipoActividad {
     COMPLETAR,
     ORDENAR,
     ASOCIAR,
+    ESCUCHA,
 }
 
 

@@ -216,6 +216,39 @@ Cambios aplicados:
     campo (reutiliza `onCambiarTexto`, sin cambios en `LeccionViewModel`). Si una
     actividad `COMPLETAR` no tiene `opciones`, el campo sigue siendo texto libre como
     antes (compatible con contenido existente).
+- RF10 - Pronunciación y escucha:
+  - La reproducción del audio real de vocabulario/pronunciación ya existía (`TarjetaContenido`,
+    `LeccionViewModel.reproducirAudio`). Lo nuevo es el **ejercicio de escucha**: nuevo
+    `TipoActividad.ESCUCHA`, evaluable, que reutiliza los campos existentes de `Actividad`
+    (`audioUrl`/`audioLocal`, `enunciado`, `opciones`, `respuestaCorrecta`) sin agregar campos
+    nuevos a la entidad.
+  - `TarjetaEscucha.kt` (`ui/screens/leccion/`) reproduce el audio automáticamente al entrar a la
+    pregunta y ofrece un botón para repetirlo; **nunca muestra** `actividad.quechua`/`traduccion`,
+    para que la respuesta dependa solo de lo que el estudiante escuchó. La calificación
+    (`LeccionViewModel.comprobar()`) compara `respuestaSeleccionada` contra `respuestaCorrecta`,
+    igual que `SELECCION`.
+  - **Calificación de pronunciación hablada (7 de noviembre de 2026, noche): implementada por
+    similitud acústica, no por reconocimiento de voz.** Se descartó el ASR (reconocimiento de
+    voz) por no existir de forma confiable para quechua (ninguna API comercial lo soporta, y los
+    modelos de investigación requieren infraestructura propia fuera del stack actual). En su
+    lugar, `PRONUNCIACION` ahora es **evaluable**: al grabar la voz y presionar "Comprobar",
+    `LeccionViewModel.evaluarPronunciacion()` decodifica la grabación y el audio de referencia de
+    la actividad a PCM (`MediaExtractor`/`MediaCodec`, SDK de Android, sin dependencias nuevas) y
+    compara ambos con **MFCC + DTW** (`SimilitudAudio.kt`, funciones puras sin dependencias de
+    Android, con pruebas unitarias en `app/src/test/.../SimilitudAudioTest.kt`) — un puntaje de
+    similitud 0-100, no una transcripción. Se aprueba con un umbral (`UMBRAL_SIMILITUD_PRONUNCIACION`,
+    hoy `55f`, **sin calibrar con voz real**: requiere ajuste al probar en un dispositivo).
+    `TIPOS_EVALUABLES` incluye `PRONUNCIACION`; `TIPOS_CONTENIDO` en `LeccionScreen.kt` ya solo
+    es `VOCABULARIO` (que sigue siendo práctica libre, sin calificar). Si la decodificación falla
+    (sin internet para un audio de referencia remoto, archivo corrupto), no se marca como
+    incorrecta: se muestra un error y se puede reintentar. `PanelRetroalimentacion` tiene mensajes
+    propios para este tipo ("¡Buena pronunciación!"/"Sigue practicando esa pronunciación.") en vez
+    de "La respuesta era: " (que no aplica aquí), y muestra el % de similitud.
+  - Espejo en `QchuaGo-Admin`: `types.ts`, `SelectorTipoActividad.tsx`, `VistaPreviaMovil.tsx` y
+    `ActividadesPage.tsx` (nuevo `ESCUCHA` en el selector de tipo, con el mismo bloque de
+    opciones/respuesta correcta que `SELECCION` y el campo de audio, antes exclusivo de
+    `VOCABULARIO`/`PRONUNCIACION`, ahora extraído a `renderCampoAudio()` y reutilizado también
+    para `ESCUCHA`).
 - RF14 - Seguimiento del progreso:
   - Una lección real (`Rutas.LECCION`, no la de "Test de nivel") queda marcada como
     completada al llegar a `EstadoLeccion.Finalizada` y presionar "Volver" en
@@ -330,3 +363,10 @@ por completo (ver sección RF06 arriba).
 - `gradlew.bat assembleDebug`: compilación correcta el 7 de noviembre de 2026 tras implementar RF16.
 - `gradlew.bat assembleDebug`: compilación correcta el 7 de noviembre de 2026 tras implementar RF19.
 - `gradlew.bat assembleDebug`: compilación correcta el 7 de noviembre de 2026 tras implementar RF20.
+- `./gradlew assembleDebug` y `npm run build` (admin): compilación correcta el 7 de noviembre de
+  2026 tras implementar el ejercicio de escucha de RF10 (`TipoActividad.ESCUCHA`).
+- `JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug` y `./gradlew test`: compilación y
+  pruebas unitarias correctas el 7 de noviembre de 2026 tras implementar la calificación de
+  pronunciación por similitud acústica (MFCC+DTW). Las pruebas unitarias (`SimilitudAudioTest`,
+  con tonos sintéticos) validan la matemática; **no se probó con voz real en un dispositivo** ni
+  se calibró el umbral de aprobación, por no haber ninguno disponible en la sesión.

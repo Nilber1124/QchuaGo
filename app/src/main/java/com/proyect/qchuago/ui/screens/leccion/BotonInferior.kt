@@ -32,13 +32,15 @@ internal fun BotonInferior(
             TipoActividad.COMPLETAR -> estado.textoIngresado.isNotBlank()
             TipoActividad.ORDENAR -> estado.ordenActual.isNotEmpty()
             TipoActividad.ASOCIAR -> actividad.elementos.isNotEmpty() && estado.pares.size == actividad.elementos.size
-            TipoActividad.VOCABULARIO, TipoActividad.PRONUNCIACION -> false
+            TipoActividad.ESCUCHA -> estado.respuestaSeleccionada != null
+            TipoActividad.PRONUNCIACION -> estado.grabacionDisponible
+            TipoActividad.VOCABULARIO -> false
         }
         Button(
             onClick = onComprobar,
-            enabled = hayRespuesta,
+            enabled = hayRespuesta && !estado.evaluandoPronunciacion,
             modifier = modifier.fillMaxWidth(),
-        ) { Text("Comprobar") }
+        ) { Text(if (estado.evaluandoPronunciacion) "Evaluando..." else "Comprobar") }
     } else {
         Button(onClick = onContinuar, modifier = modifier.fillMaxWidth()) {
             Text(if (estado.esUltima) "Ver resultado" else "Continuar")
