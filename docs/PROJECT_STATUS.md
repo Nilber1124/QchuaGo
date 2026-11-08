@@ -249,6 +249,41 @@ Cambios aplicados:
     opciones/respuesta correcta que `SELECCION` y el campo de audio, antes exclusivo de
     `VOCABULARIO`/`PRONUNCIACION`, ahora extraído a `renderCampoAudio()` y reutilizado también
     para `ESCUCHA`).
+- RF11 - Diccionario y desafío de traducción bidireccional:
+  - Nueva pestaña **Diccionario** real (antes placeholder): `DiccionarioScreen.kt` carga un
+    diccionario quechua-español **local, embebido en la app** (`app/src/main/assets/diccionario_quechua.csv`,
+    1254 entradas: 972 `palabra` + 282 `expresion`), sin Firestore ni administración desde
+    `QchuaGo-Admin` — es contenido de referencia fijo, no contenido de lección. `DiccionarioViewModel`
+    lo parsea una sola vez (`Dispatchers.IO`) con un separador de CSV propio (soporta campos entre
+    comillas con comas internas) y expone `Recurso<List<EntradaDiccionario>>` (se reutiliza el
+    `Recurso<T>` genérico ya existente, sin inventar un sealed class de estado nuevo). La pantalla
+    tiene un buscador que filtra por texto en quechua o español.
+  - Botón flotante **"🎯 Desafío"** sobre la lista: abre una **ventana flotante** (`Dialog` de
+    Compose, no una pantalla ni ruta nueva) con `DesafioDiccionario.kt`/`DesafioViewModel.kt` — un
+    ejercicio de traducción de práctica libre: toma una palabra/expresión al azar del diccionario,
+    una dirección al azar (quechua→español o español→quechua) y arma 4 opciones (1 correcta + 3
+    distractores de otras entradas). Reutiliza `OpcionTarjeta` de `ui/screens/leccion/` (es
+    `internal`, visible en todo el módulo `app`). Lleva un contador de aciertos/intentos solo en
+    memoria de esa sesión del diálogo — **no otorga XP, no afecta la racha y no se guarda en
+    Firestore**, es práctica suelta sin relación con lecciones específicas.
+  - **Columnas `alias`/`nota` (7 de noviembre de 2026, misma tarde):** el CSV se amplió a 5
+    columnas (`tipo,quechua,espanol,alias,nota`, 1259 filas) porque varias palabras en español
+    (ej. "hola", "adiós", "gracias" en su sentido coloquial) no tienen equivalente léxico literal
+    en quechua, solo una expresión que cumple esa función social (ej. `Rimaykullayki` no significa
+    literalmente "hola"). `alias` (términos separados por `;`) agrega esos sinónimos coloquiales a
+    la búsqueda sin tocar el campo `espanol`; `nota` (52 filas) explica la aclaración lingüística.
+    `EntradaDiccionario` ganó `alias: List<String>` y `nota: String`; la búsqueda de
+    `DiccionarioScreen` ahora también compara contra `alias`; la fila de la lista y la
+    retroalimentación del Desafío muestran la `nota` ("💡 ...") cuando existe. El `alias` no
+    participa en la calificación del Desafío (sigue siendo opción múltiple contra `quechua`/
+    `espanol` exactos).
+  - **Aviso genérico de "sin traducción literal" (7 de noviembre de 2026, misma tarde):** cuando
+    la búsqueda solo encuentra resultados por `alias` (ninguna entrada tiene el texto buscado
+    literal en `quechua`/`espanol` — ej. buscar "hola"), `DiccionarioScreen` muestra un aviso fijo
+    y genérico debajo del buscador ("💡 "...no existe como palabra o frase literal en quechua...")
+    antes de la lista. Si el texto buscado sí aparece literal en algún resultado (ej. "no" →
+    `mana`), no se muestra nada nuevo. Es independiente de la `nota` por fila, que sigue mostrando
+    el detalle específico de cada expresión.
 - RF14 - Seguimiento del progreso:
   - Una lección real (`Rutas.LECCION`, no la de "Test de nivel") queda marcada como
     completada al llegar a `EstadoLeccion.Finalizada` y presionar "Volver" en
@@ -345,6 +380,34 @@ desbloqueo secuencial dentro del mapa de unidades/lecciones, que ya funciona de 
 a punta. El concepto de niveles de dificultad (Básico/Intermedio/Avanzado) se eliminó
 por completo (ver sección RF06 arriba).
 
+## Contenido de prueba: 5 unidades regeneradas (7 de noviembre de 2026, noche)
+
+`scripts/seed_firestore.js` se reescribió por completo: ya no es "crear si no existe"
+(`crearSiNoExiste`), ahora **borra unidad_1 a unidad_5 recursivamente** (`db.recursiveDelete`)
+y las vuelve a crear desde cero cada vez que se corre — pensado para regenerar contenido de
+prueba, no para proteger datos reales de producción. Resultado de la última corrida: 5
+unidades, 10 lecciones reales + 5 checkpoints, 70 actividades (los 7 tipos —
+VOCABULARIO/PRONUNCIACION/SELECCION/COMPLETAR/ORDENAR/ASOCIAR/ESCUCHA— en cada lección),
+todas con contenido real tomado de `diccionario_quechua.csv`:
+
+- Unidad 1: Saludos · Unidad 2: Familia · Unidad 3: Números (regeneradas) · Unidad 4: Colores
+  y cuerpo · Unidad 5: Animales y comida (nuevas).
+
+**Audio de las 28 palabras/frases usadas:** generado con **edge-tts** (voces neuronales de
+Microsoft, gratis, sin API key) con la voz en español peruano `es-PE-CamilaNeural` leyendo el
+texto en quechua tal cual está escrito — no es pronunciación quechua nativa, es una
+aproximación con voz en español (se investigó: ni gTTS ni edge-tts tienen quechua entre sus
+idiomas/voces). Subido a Cloudinary con el mismo preset **unsigned** `qchuago_audios` que ya
+usa `QchuaGo-Admin` (`src/cloudinary/audioService.ts`, carpeta `audios/seed_rf05/`), así que
+todas las actividades usan `audioUrl` (ninguna usa `audioLocal`, a pedido explícito del
+usuario: todo el contenido vive en Firestore, no embebido en la app). Las URLs quedaron
+hardcodeadas en el propio `seed_firestore.js` (`const AUDIOS = {...}`). Cada actividad sigue
+con `pendienteValidacionLinguistica: true`: el contenido y el audio no están validados por un
+hablante nativo, es contenido de prueba para ejercitar los 7 tipos de la app end-to-end.
+
+Requiere `scripts/serviceAccountKey.json` (Firebase Console → Configuración → Cuentas de
+servicio → Generar nueva clave privada), nunca comiteado (ya está en `.gitignore`).
+
 ## Pendientes relacionados
 
 - El resultado del "Test de nivel" del onboarding (aciertos sobre `ActividadesPruebaNivel`) todavía no determina el nivel inicial real del usuario; queda para una iteración futura. (Esto es el campo de perfil `Usuario.nivel`, sin relación con la colección `niveles` que se eliminó.)
@@ -365,6 +428,15 @@ por completo (ver sección RF06 arriba).
 - `gradlew.bat assembleDebug`: compilación correcta el 7 de noviembre de 2026 tras implementar RF20.
 - `./gradlew assembleDebug` y `npm run build` (admin): compilación correcta el 7 de noviembre de
   2026 tras implementar el ejercicio de escucha de RF10 (`TipoActividad.ESCUCHA`).
+- `JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug`: compilación correcta el 7 de
+  noviembre de 2026 tras implementar el diccionario local y el desafío de traducción de RF11. No
+  se probó en un emulador/dispositivo real por no haber ninguno disponible en la sesión.
+- `JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug`: compilación correcta el 7 de
+  noviembre de 2026 tras agregar soporte para `alias`/`nota` en el diccionario (palabras sin
+  traducción literal). Tampoco se probó en emulador/dispositivo real.
+- `JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug`: compilación correcta el 7 de
+  noviembre de 2026 tras agregar el aviso genérico de "sin traducción literal" en la búsqueda del
+  diccionario. Tampoco se probó en emulador/dispositivo real.
 - `JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug` y `./gradlew test`: compilación y
   pruebas unitarias correctas el 7 de noviembre de 2026 tras implementar la calificación de
   pronunciación por similitud acústica (MFCC+DTW). Las pruebas unitarias (`SimilitudAudioTest`,
