@@ -7,6 +7,7 @@ import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.random.Random
 
 /**
  * Comparación acústica entre dos audios (MFCC + DTW) para calificar pronunciación
@@ -20,22 +21,34 @@ private const val SALTO_FRAME = 128
 private const val NUM_FILTROS_MEL = 20
 private const val NUM_COEF_MFCC = 13
 
-/**
- * Escala que convierte la distancia DTW (en unidades de MFCC, sin un rango fijo
- * conocido de antemano) a un puntaje 0-100. Valor de partida sin calibrar contra
- * voz real: ajustar junto con el umbral de aprobación al probar en un dispositivo.
- */
-private const val ESCALA_DISTANCIA = 4f
+/** RMS objetivo (escala de 16 bits) al que se normaliza el volumen antes de comparar. */
+private const val RMS_OBJETIVO = 4000.0
 
-/** Puntaje de similitud 0-100 (100 = prácticamente idéntico) entre dos grabaciones. */
+/** Tope de amplificación: evita que un clip casi silencioso se vuelva ruido a todo volumen. */
+private const val GANANCIA_MAXIMA = 20.0
+
+/** Semilla fija del ruido usado como "peor caso" al escalar la similitud (ver [calcularSimilitud]). */
+private const val SEMILLA_RUIDO_REFERENCIA = 1337
+
+/**
+ * Puntaje de similitud 0-100 (100 = prácticamente idéntico) entre dos grabaciones.
+ *
+ * La distancia DTW entre MFCC no tiene una escala fija conocida de antemano (depende
+ * del largo del audio, del contenido, etc.) — un factor fijo calibrado con tonos
+ * sintéticos resultó demasiado agresivo con voz real (siempre daba ~0%). En vez de
+ * adivinar otra constante, se escala de forma relativa: se compara la distancia real
+ * contra la distancia entre la referencia y un ruido aleatorio del mismo largo (un
+ * "peor caso" sin relación alguna con la referencia), así el puntaje se ajusta solo
+ * al contenido de cada actividad en vez de depender de un número mágico global.
+ */
 fun calcularSimilitud(
     pcmUsuario: ShortArray,
     tasaUsuario: Int,
     pcmReferencia: ShortArray,
     tasaReferencia: Int,
 ): Float {
-    val usuario = remuestrear(pcmUsuario, tasaUsuario, TASA_OBJETIVO)
-    val referencia = remuestrear(pcmReferencia, tasaReferencia, TASA_OBJETIVO)
+    val usuario = normalizarVolumen(remuestrear(pcmUsuario, tasaUsuario, TASA_OBJETIVO))
+    val referencia = normalizarVolumen(remuestrear(pcmReferencia, tasaReferencia, TASA_OBJETIVO))
     if (usuario.size < TAMANO_FRAME || referencia.size < TAMANO_FRAME) return 0f
 
     val mfccUsuario = extraerMfcc(usuario, TASA_OBJETIVO)
@@ -43,7 +56,19 @@ fun calcularSimilitud(
     if (mfccUsuario.isEmpty() || mfccReferencia.isEmpty()) return 0f
 
     val distancia = distanciaDtw(mfccUsuario, mfccReferencia)
-    return (100f - distancia * ESCALA_DISTANCIA).coerceIn(0f, 100f)
+
+    val ruido = normalizarVolumen(generarRuido(referencia.size, SEMILLA_RUIDO_REFERENCIA))
+    val mfccRuido = extraerMfcc(ruido, TASA_OBJETIVO)
+    if (mfccRuido.isEmpty()) return 0f
+    val distanciaPeorCaso = distanciaDtw(mfccReferencia, mfccRuido)
+    if (distanciaPeorCaso <= 0f) return 0f
+
+    return (100f * (1f - distancia / distanciaPeorCaso)).coerceIn(0f, 100f)
+}
+
+private fun generarRuido(largo: Int, semilla: Int): ShortArray {
+    val random = Random(semilla)
+    return ShortArray(largo) { random.nextInt(-Short.MAX_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort() }
 }
 
 /** Remuestreo simple por interpolación lineal (suficiente para comparar, no para audio final). */
@@ -57,6 +82,24 @@ fun remuestrear(pcm: ShortArray, tasaOrigen: Int, tasaDestino: Int): ShortArray 
         val siguiente = (base + 1).coerceIn(0, pcm.size - 1)
         val frac = posOrigen - base
         (pcm[base] * (1 - frac) + pcm[siguiente] * frac).toInt().toShort()
+    }
+}
+
+/**
+ * Escala el volumen a un RMS objetivo. El coeficiente MFCC de energía (c0) se
+ * compara en términos absolutos entre ambos audios, así que una grabación más
+ * baja que la referencia infla la distancia aunque la pronunciación sea
+ * correcta — por eso se normaliza antes de extraer MFCC, no después.
+ */
+fun normalizarVolumen(pcm: ShortArray): ShortArray {
+    if (pcm.isEmpty()) return pcm
+    var sumaCuadrados = 0.0
+    for (muestra in pcm) sumaCuadrados += muestra.toDouble() * muestra.toDouble()
+    val rms = sqrt(sumaCuadrados / pcm.size)
+    if (rms < 1.0) return pcm // silencio/ruido casi nulo: no amplificar a ciegas
+    val ganancia = (RMS_OBJETIVO / rms).coerceAtMost(GANANCIA_MAXIMA)
+    return ShortArray(pcm.size) { i ->
+        (pcm[i] * ganancia).coerceIn(Short.MIN_VALUE.toDouble(), Short.MAX_VALUE.toDouble()).toInt().toShort()
     }
 }
 

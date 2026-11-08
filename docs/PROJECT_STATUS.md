@@ -325,6 +325,28 @@ Cambios aplicados:
     incorrecta: se muestra un error y se puede reintentar. `PanelRetroalimentacion` tiene mensajes
     propios para este tipo ("¡Buena pronunciación!"/"Sigue practicando esa pronunciación.") en vez
     de "La respuesta era: " (que no aplica aquí), y muestra el % de similitud.
+  - **Fix 1 (8 de noviembre de 2026): siempre daba ~0% con grabaciones bajitas.** `SimilitudAudio.kt`
+    comparaba el coeficiente MFCC de energía (c0) en términos absolutos; si la grabación del
+    usuario sonaba más baja que la referencia, esa sola diferencia de volumen inflaba la distancia
+    muy por encima de cualquier diferencia real de pronunciación. Se agregó `normalizarVolumen()`
+    (normaliza ambos audios a un RMS objetivo antes de extraer MFCC, con tope de ganancia para no
+    amplificar silencio/ruido a ciegas) y un test de regresión (`SimilitudAudioTest`: mismo tono
+    atenuado 15x sigue dando similitud alta).
+  - **Fix 2 (8 de noviembre de 2026, misma tarde): seguía dando ~0% probado en dispositivo real.**
+    El fix 1 no era suficiente: `ESCALA_DISTANCIA` (constante fija que convertía la distancia DTW
+    a 0-100%) se había calibrado solo con tonos sintéticos, donde la distancia entre una señal y sí
+    misma es casi 0 — pero la distancia MFCC/DTW entre dos tomas reales de un mismo sonido (con
+    voz real, mic real) es naturalmente mucho mayor, así que cualquier constante fija calibrada con
+    tonos puros resultaba demasiado agresiva y todo caía a 0%. Se eliminó `ESCALA_DISTANCIA` por
+    completo: ahora `calcularSimilitud()` escala la distancia de forma **relativa**, comparando
+    contra la distancia entre la referencia y un ruido aleatorio del mismo largo (un "peor caso"
+    calculado en el momento, no un número mágico fijo) — `similitud = 100 * (1 - distancia /
+    distanciaPeorCaso)`. Nuevo test con una señal más realista (varios armónicos + ruido, dos
+    "tomas" distintas) para no depender solo de tonos puros al validar esto.
+  - **Botón "🔄 Intentar de nuevo" (8 de noviembre de 2026, misma tarde):** una vez calificada una
+    actividad `PRONUNCIACION`, `BotonInferior` ahora muestra ese botón además de "Continuar" —
+    llama a `LeccionViewModel.reintentarPronunciacion()`, que limpia el resultado/grabación
+    anterior sin avanzar de actividad, para volver a grabar y calificar en el momento.
   - Espejo en `QchuaGo-Admin`: `types.ts`, `SelectorTipoActividad.tsx`, `VistaPreviaMovil.tsx` y
     `ActividadesPage.tsx` (nuevo `ESCUCHA` en el selector de tipo, con el mismo bloque de
     opciones/respuesta correcta que `SELECCION` y el campo de audio, antes exclusivo de
@@ -531,3 +553,14 @@ servicio → Generar nueva clave privada), nunca comiteado (ya está en `.gitign
   noviembre de 2026 (tarde) tras pasar `NavController` directo a todas las pantallas con
   navegación, eliminando las lambdas `onIrAX`/`onVolver`/`onAbrirX`. Tampoco se probó en
   emulador/dispositivo real.
+- `JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug` y `./gradlew test`: compilación y
+  pruebas unitarias correctas el 8 de noviembre de 2026 tras corregir que la calificación de
+  pronunciación daba ~0% con grabaciones de volumen bajo (`normalizarVolumen()` en
+  `SimilitudAudio.kt`). Reportado por el usuario probando en un dispositivo real.
+- `JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug` y `./gradlew test`: compilación y
+  pruebas unitarias correctas el 8 de noviembre de 2026 (misma tarde) tras el usuario reportar que
+  seguía dando ~0% probando en el dispositivo real tras el fix anterior. Se eliminó la constante
+  fija `ESCALA_DISTANCIA` (calibrada solo con tonos sintéticos) a favor de una escala relativa
+  contra ruido aleatorio, y se agregó el botón "Intentar de nuevo" en `PRONUNCIACION`. Ninguno de
+  los dos fixes se volvió a probar con voz real en esta sesión (sin dispositivo disponible),
+  solo con los tests unitarios (incluido uno con una señal más realista que un tono puro).

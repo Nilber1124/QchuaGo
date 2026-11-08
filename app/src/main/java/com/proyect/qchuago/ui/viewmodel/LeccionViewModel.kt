@@ -290,6 +290,24 @@ class LeccionViewModel(
     }
 
     /**
+     * Permite regrabar y volver a calificar la misma actividad de PRONUNCIACION
+     * sin pasar a la siguiente — limpia el resultado y la grabación anterior,
+     * dejando el botón "Grabar mi voz" listo para un nuevo intento.
+     */
+    fun reintentarPronunciacion() {
+        val estado = enCursoActual() ?: return
+        if (estado.actividadActual.tipo != TipoActividad.PRONUNCIACION) return
+        _estadoLeccion.value = estado.copy(
+            verificada = false,
+            esCorrecta = null,
+            grabacionDisponible = false,
+            evaluandoPronunciacion = false,
+            similitudPronunciacion = null,
+            errorEvaluacion = null,
+        )
+    }
+
+    /**
      * Registra si una respuesta de actividad evaluable fue correcta o incorrecta,
      * bajo usuarios/{uid}/respuestas. Un documento por actividad (se sobrescribe
      * si el usuario repite el ejercicio).

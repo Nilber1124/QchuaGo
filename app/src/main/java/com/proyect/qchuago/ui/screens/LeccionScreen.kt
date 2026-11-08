@@ -120,6 +120,7 @@ fun LeccionScreen(
                     onSeleccionarOpcionAsociar = leccionViewModel::seleccionarOpcionAsociar,
                     onComprobar = leccionViewModel::comprobar,
                     onContinuar = leccionViewModel::continuar,
+                    onReintentarPronunciacion = leccionViewModel::reintentarPronunciacion,
                     onReproducirAudio = leccionViewModel::reproducirAudio,
                     onGrabar = {
                         val permisoConcedido = ContextCompat.checkSelfPermission(
@@ -160,6 +161,7 @@ private data class AccionesLeccion(
     val onSeleccionarOpcionAsociar: (Int) -> Unit,
     val onComprobar: () -> Unit,
     val onContinuar: () -> Unit,
+    val onReintentarPronunciacion: () -> Unit,
     val onReproducirAudio: () -> Unit,
     val onGrabar: () -> Unit,
     val onReproducirMiGrabacion: () -> Unit,
@@ -261,6 +263,7 @@ private fun ContenidoLeccion(
             esContenido = esContenido,
             onComprobar = acciones.onComprobar,
             onContinuar = acciones.onContinuar,
+            onReintentarPronunciacion = acciones.onReintentarPronunciacion,
         )
     }
 }
