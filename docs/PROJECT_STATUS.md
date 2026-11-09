@@ -102,6 +102,20 @@ funcionalidad ni de arquitectura (sigue siendo `ViewModel <-> Composable`).
   (compila sin errores). No se probó en emulador/dispositivo real por no haber
   ninguno disponible en la sesión.
 
+## Fusión de PerfilScreen en una sola función (8 de noviembre de 2026)
+
+`PerfilScreen.kt` había quedado con el patrón viejo "con estado" + "pura" (2
+funciones `PerfilScreen`, la segunda con ~11 parámetros incluyendo lambdas
+`onCambiarTema`/`onActualizarNombre`/etc.) que el proyecto abandonó en el
+cambio de "NavController directo" de este mismo día. Se fusionaron en una
+sola función `PerfilScreen(navController, authViewModel, cursoViewModel,
+modifier)` que llama directo a `authViewModel::cambiarTema` /
+`actualizarNombre` / `cambiarContrasena` / `cerrarSesion` /
+`limpiarGuardadoExitoso`, igual que `HomeScreen`/`InicioScreen`/
+`ProgresoScreen`. No cambió ninguna función privada (`EncabezadoPerfil`,
+`TarjetaPerfil`, diálogos, etc.). También se quitó un botón "Enviar
+Sugerencia" que se había agregado sin conectar a ninguna ruta.
+
 ## Eliminación de la capa Service (26 de octubre de 2026)
 
 Cambio de arquitectura solicitado explícitamente: se eliminó por completo

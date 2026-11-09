@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.proyect.qchuago.R
 import com.proyect.qchuago.data.entidad.Usuario
 import com.proyect.qchuago.ui.viewmodel.AuthViewModel
@@ -33,6 +34,7 @@ import com.proyect.qchuago.ui.viewmodel.CursoViewModel
 
 @Composable
 fun PerfilScreen(
+    navController: NavController,
     authViewModel: AuthViewModel,
     cursoViewModel: CursoViewModel = viewModel(),
     modifier: Modifier = Modifier,
@@ -47,38 +49,9 @@ fun PerfilScreen(
         usuario?.leccionesCompletadasIds.orEmpty(),
         usuario?.evaluacionesAprobadasIds.orEmpty(),
     )
+    val leccionesCompletadas = resumen.leccionesCompletadas
+    val totalLecciones = resumen.totalLecciones
 
-    PerfilScreen(
-        usuario = usuario,
-        error = error,
-        temaOscuro = temaOscuro,
-        guardadoExitoso = guardadoExitoso,
-        leccionesCompletadas = resumen.leccionesCompletadas,
-        totalLecciones = resumen.totalLecciones,
-        onCambiarTema = authViewModel::cambiarTema,
-        onActualizarNombre = authViewModel::actualizarNombre,
-        onCambiarContrasena = authViewModel::cambiarContrasena,
-        onGuardadoExitosoConsumido = authViewModel::limpiarGuardadoExitoso,
-        onCerrarSesion = authViewModel::cerrarSesion,
-        modifier = modifier,
-    )
-}
-
-@Composable
-fun PerfilScreen(
-    usuario: Usuario?,
-    error: String?,
-    temaOscuro: Boolean,
-    guardadoExitoso: Boolean,
-    leccionesCompletadas: Int,
-    totalLecciones: Int,
-    onCambiarTema: (Boolean) -> Unit,
-    onActualizarNombre: (String) -> Unit,
-    onCambiarContrasena: (String, String) -> Unit,
-    onGuardadoExitosoConsumido: () -> Unit,
-    onCerrarSesion: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
     var mostrarEditarPerfil by remember { mutableStateOf(false) }
     var mostrarCambiarContrasena by remember { mutableStateOf(false) }
     var nuevoNombre by remember { mutableStateOf("") }
@@ -100,7 +73,7 @@ fun PerfilScreen(
             mostrarCambiarContrasena = false
             nuevaContrasena = ""
             confirmarContrasena = ""
-            onGuardadoExitosoConsumido()
+            authViewModel.limpiarGuardadoExitoso()
         }
     }
 
@@ -147,13 +120,13 @@ fun PerfilScreen(
                 texto = "PREFERENCIAS",
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            PreferenciasPerfil(temaOscuro, onCambiarTema)
+            PreferenciasPerfil(temaOscuro, authViewModel::cambiarTema)
 
             Spacer(Modifier.height(24.dp))
             OpcionPerfil("Cambiar contraseña") { mostrarCambiarContrasena = true }
 
             Spacer(Modifier.height(12.dp))
-            BotonCerrarSesion(onCerrarSesion)
+            BotonCerrarSesion(authViewModel::cerrarSesion)
 
             Spacer(Modifier.height(20.dp))
             Text(
@@ -172,7 +145,7 @@ fun PerfilScreen(
             nombre = nuevoNombre,
             error = error,
             onNombreChange = { nuevoNombre = it },
-            onGuardar = { onActualizarNombre(nuevoNombre) },
+            onGuardar = { authViewModel.actualizarNombre(nuevoNombre) },
             onCancelar = { mostrarEditarPerfil = false }
         )
     }
@@ -184,7 +157,7 @@ fun PerfilScreen(
             error = error,
             onNuevaChange = { nuevaContrasena = it },
             onConfirmarChange = { confirmarContrasena = it },
-            onGuardar = { onCambiarContrasena(nuevaContrasena, confirmarContrasena) },
+            onGuardar = { authViewModel.cambiarContrasena(nuevaContrasena, confirmarContrasena) },
             onCancelar = {
                 mostrarCambiarContrasena = false
                 nuevaContrasena = ""

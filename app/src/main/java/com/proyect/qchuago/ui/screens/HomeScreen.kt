@@ -100,6 +100,7 @@ fun HomeScreen(
                 NavTab.PERFIL -> PerfilScreen(
                     authViewModel = authViewModel,
                     cursoViewModel = cursoViewModel,
+                    navController = navController,
                 )
             }
         }
