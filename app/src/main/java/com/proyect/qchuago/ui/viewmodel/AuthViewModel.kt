@@ -86,6 +86,26 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Elimina cualquier campo por completo del documento del usuario en Firestore.
+     * Ejemplo: `borrarCampo("nombre")`
+     */
+    fun borrarCampo(nombreCampo: String, onCompletado: (exito: Boolean) -> Unit = {}) {
+        val uid = _usuario.value?.uid ?: return
+        viewModelScope.launch {
+            try {
+                usuariosCollection.document(uid)
+                    .update(nombreCampo, com.google.firebase.firestore.FieldValue.delete())
+                    .await()
+                actualizarPerfil()
+                onCompletado(true)
+            } catch (e: Exception) {
+                _error.value = "No se pudo borrar el campo $nombreCampo."
+                onCompletado(false)
+            }
+        }
+    }
+
     fun cambiarTema(activo: Boolean) {
         actualizarUsuario { it.copy(temaOscuro = activo) }
     }
